@@ -756,130 +756,194 @@
       .catch((err) => toast(err.message || 'تعذّر تصدير Excel', 'error'));
   }
 
-  /* ─────────────────── تقرير الطباعة ─────────────────── */
-  function buildPrintHTML() {
-    const meta = readMeta();
-    const s = Comparison.summarize(State.items); // يقرأ مصفوفة البنود الحالية فوراً (لا نسخ مخزنة)
+  /* ═══════════ معمارية الطباعة المعزولة (نافذة مؤقتة ذاتية الدعم) ═══════════
+     مستند HTML كامل ومستقل يُبنى في iframe خفي بلا أي CSS من واجهة التطبيق،
+     فتُفرض ألوان سوداء صريحة في كل النصوص وخلفيات بيضاء في الترويسة —
+     يستحيل معها ظهور "أبيض على أبيض". كل عناصر التحكم في الواجهة خارج هذه
+     النافذة فلا تُطبع إطلاقاً. الطباعة لا تُستدعى قبل التحقق من امتلاء <tbody>. */
+
+  /* 1) توليد صف <tr> لكل بند من مصفوفة البنود الحالية عبر محرك المقارنة */
+  function printRowHTML(it, i) {
+    try {
+      const r = Comparison.analyzeItem(it);
+      const st = r.status;
+      const fmtDiff = (v) => {
+        if (st === Comparison.STATUS.UNKNOWN || Math.abs(v) < 1e-9) return '—';
+        return v > 0 ? `+${fmtNum(v)}` : fmtNum(v);
+      };
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${esc(it.itemNumber || '—')}</td>
+        <td>${esc(it.name || '—')}</td>
+        <td>${esc(it.unit || '—')}</td>
+        <td>${fmtNum(it.quantity)}</td>
+        <td>${fmtNum(it.unitPrice)}</td>
+        <td>${fmtNum(r.invoiceTotal)}</td>
+        <td>${r.listPrice == null ? '—' : fmtNum(r.listPrice)}</td>
+        <td>${fmtDiff(r.unitDiff)}</td>
+        <td>${fmtDiff(r.totalDiff)}</td>
+        <td>${Comparison.statusText(st)}</td>
+      </tr>`;
+    } catch (e) {
+      // بند معطوب لا يُفرّغ الجدول كاملاً — صف احتياطي يُبقي التقرير مقروءاً
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${esc(it.itemNumber || '—')}</td>
+        <td>${esc(it.name || '—')}</td>
+        <td>${esc(it.unit || '—')}</td>
+        <td>${fmtNum(it.quantity)}</td>
+        <td>${fmtNum(it.unitPrice)}</td>
+        <td colspan="5">بيانات غير مكتملة</td>
+      </tr>`;
+    }
+  }
+
+  /* 2) بطاقات الملخص + معادلة الصافي (داخل قالب الطباعة مباشرة تحت الجدول) */
+  function buildPrintTotalsHTML() {
+    const s = Comparison.summarize(State.items);
     const t = s.totals;
-    const listName = activeListName();
-    const qtySum = State.items.reduce((a, it) => a + (Number(it.quantity) || 0), 0);
-
-    // توليد صفوف <tr> ديناميكياً لكل بند من مصفوفة البنود الحالية (لا قالب ثابت)
-    // لكل بند: رقم الصنف، الاسم، الوحدة، الكمية، سعر الوحدة، إجمالي المبلغ،
-    // السعر المعتمد، فرق الوحدة، إجمالي الفرق، حالة المراجعة
-    const rows = State.items.map((it, i) => {
-      try {
-        const r = Comparison.analyzeItem(it);
-        const st = r.status;
-        const ud = st === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.unitDiff) < 1e-9 ? '—' : (r.unitDiff > 0 ? `+${fmtNum(r.unitDiff)}` : fmtNum(r.unitDiff)));
-        const td = st === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.totalDiff) < 1e-9 ? '—' : (r.totalDiff > 0 ? `+${fmtNum(r.totalDiff)}` : fmtNum(r.totalDiff)));
-        return `<tr>
-          <td>${i + 1}</td>
-          <td>${esc(it.itemNumber || '—')}</td>
-          <td>${esc(it.name || '—')}</td>
-          <td>${esc(it.unit || '—')}</td>
-          <td>${fmtNum(it.quantity)}</td>
-          <td>${fmtNum(it.unitPrice)}</td>
-          <td>${fmtNum(r.invoiceTotal)}</td>
-          <td>${r.listPrice == null ? '—' : fmtNum(r.listPrice)}</td>
-          <td>${ud}</td>
-          <td>${td}</td>
-          <td>${Comparison.statusText(st)}</td>
-        </tr>`;
-      } catch (e) {
-        // بند معطوب لا يفرّغ الجدول كاملاً — صف احتياطي يُبقي التقرير مقروءاً
-        return `<tr>
-          <td>${i + 1}</td>
-          <td>${esc(it.itemNumber || '—')}</td>
-          <td>${esc(it.name || '—')}</td>
-          <td>${esc(it.unit || '—')}</td>
-          <td>${fmtNum(it.quantity)}</td>
-          <td>${fmtNum(it.unitPrice)}</td>
-          <td colspan="5">بيانات غير مكتملة</td>
-        </tr>`;
-      }
-    }).join('');;
-
     const isHigh = s.netDiff > 0.004, isLow = s.netDiff < -0.004;
-    const netBadge = isHigh
-      ? `<span class="eq-high">زيادة صافية عن المعتمد: ${money(s.netDiff)}</span>`
-      : isLow
-        ? `<span class="eq-low">انخفاض صافٍ عن المعتمد: ${money(Math.abs(s.netDiff))}</span>`
-        : `<span class="eq-ok">الفاتورة متوازنة مع المعتمد</span>`;
-
-    // بطاقات الملخص النهائي (إجمالي الفاتورة / الزيادة / الانخفاض / عدد البنود) — الانخفاض بتلوين تحذيري
-    const sumCards = [
+    const cards = [
       { label: 'إجمالي الفاتورة', value: money(t.invoiceTotal) },
       { label: 'إجمالي زيادة الأسعار', value: money(t.highTotal) },
-      { label: 'إجمالي الانخفاض عن المعتمد', value: money(t.lowTotal), warn: true },
-      { label: 'عدد البنود', value: `${State.items.length} بند` },
+      { label: 'إجمالي الانخفاض عن المعتمد', value: money(t.lowTotal) },
+      { label: 'صافي الفرق', value: signedMoney(s.netDiff), cls: isHigh ? 'eq-high' : (isLow ? 'eq-low' : 'eq-ok') },
     ];
-    const sumHTML = sumCards.map((c) => `<div class="pr-card"><span>${c.label}</span><b${c.warn ? ' style="color:#c2410c"' : ''}>${c.value}</b></div>`).join('');
-
-    const customer = meta.customer !== undefined && meta.customer !== null ? meta.customer : meta.vendor || '—';
     return `
-      <div class="pr-title">
-        <div><h1>تقرير مراجعة فاتورة العميل ومقارنة أسعار البيع</h1></div>
-        <div class="pr-meta">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}</div>
+      <div class="sum-cards">
+        ${cards.map((c) => `<div class="sum-card"><span>${c.label}</span><b class="${c.cls || ''}">${c.value}</b></div>`).join('')}
       </div>
-      <div class="pr-meta">
-        <div><b>العميل:</b> ${esc(customer)} &nbsp;|&nbsp; <b>رقم الفاتورة:</b> ${esc(meta.invoiceNo || '—')}</div>
-        <div><b>تاريخ الفاتورة:</b> ${esc(meta.date || todayStr())} &nbsp;|&nbsp; <b>القائمة المعتمدة:</b> ${esc(listName)}</div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th><th>رقم الصنف</th><th>اسم المنتج</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th>
-            <th>إجمالي المبلغ</th><th>السعر المعتمد</th><th>فرق الوحدة</th><th>إجمالي الفرق</th><th>المراجعة</th>
-          </tr>
-        </thead>
-        <tbody>${rows || '<tr><td colspan="11" style="text-align:center">لا توجد بنود</td></tr>'}</tbody>
-        <tfoot>
-          <tr>
-            <td colspan="4">إجمالي البنود (${State.items.length})</td>
-            <td>${fmtNum(qtySum)}</td>
-            <td></td>
-            <td>${fmtNum(t.invoiceTotal)}</td>
-            <td>${fmtNum(t.expectedTotal)}</td>
-            <td colspan="2">${signedMoney(s.netDiff)}</td>
-            <td>${isHigh ? 'زيادة صافية' : isLow ? 'انخفاض صافٍ' : 'متوازن'}</td>
-          </tr>
-        </tfoot>
-      </table>
-      <div class="pr-sum">${sumHTML}</div>
-      <div class="pr-equation">
+      <div class="equation">
         الإجمالي المعتمد: <b>${money(t.expectedTotal)}</b> &nbsp;·&nbsp;
         صافي الفرق عن المعتمد: <b>${signedMoney(s.netDiff)}</b> &nbsp;·&nbsp;
         الانحراف: <b>${fmtNum(s.deviationPct)}%</b> &nbsp;·&nbsp;
         البنود غير المسجلة بالقائمة: <b>${t.unknownCount}</b> (${money(t.unknownTotal)})<br/>
-        ${netBadge}
-      </div>
-      ${meta.notes ? `<div class="pr-note"><b>ملاحظات:</b> ${esc(meta.notes)}</div>` : ''}
-      <div class="pr-footer">
-        <div class="sign">توقيع المراجع<div class="line"></div></div>
-        <div class="sign">خاتم الشركة<div class="line"></div></div>
-        <div class="sign">توقيع المستلم<div class="line"></div></div>
+        ${isHigh ? '<span class="eq-high">زيادة صافية عن المعتمد</span>' : isLow ? '<span class="eq-low">انخفاض صافٍ عن المعتمد</span>' : '<span class="eq-ok">الفاتورة متوازنة مع المعتمد</span>'}
       </div>`;
   }
 
-  function printReport() {
+  /* 3) بناء مستند الطباعة الكامل — هيكل نظامي (ترويسة/بيانات/جدول/ملخص/تذييل)
+        بكل تنسيقاته inline: خط أسود صريح + خلفية بيضاء على كل خلية ترويسة */
+  function buildPrintDocumentHTML() {
+    const meta = readMeta();
+    const s = Comparison.summarize(State.items);
+    const t = s.totals;
+    const customer = (meta.customer !== undefined && meta.customer !== null) ? meta.customer : meta.vendor || '—';
+    const qtySum = State.items.reduce((a, it) => a + (Number(it.quantity) || 0), 0);
+    const isHigh = s.netDiff > 0.004, isLow = s.netDiff < -0.004;
+    const rowsHTML = State.items.map(printRowHTML).join('');
+
+    return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>تقرير مراجعة فاتورة — ${esc(meta.invoiceNo || '')}</title>
+<style>
+  * { box-sizing: border-box; }
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  html, body { margin: 0; padding: 0; background: #fff; font-family: 'Tajawal','Segoe UI',Arial,sans-serif; color: #000000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  h1 { font-size: 20px; margin: 0 0 4px; color: #000000; }
+  .title { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #000000; padding-bottom: 10px; margin-bottom: 12px; page-break-after: avoid; }
+  .meta { font-size: 12px; color: #000000; line-height: 1.8; }
+  .meta b { color: #000000; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 12px 0; color: #000000; }
+  thead { display: table-header-group; }
+  th, td { border: 1px solid #000000; padding: 7px 9px; text-align: right; vertical-align: top; color: #000000 !important; }
+  thead th { background: #ffffff !important; color: #000000 !important; font-weight: 800; font-size: 11px; }
+  tbody tr { page-break-inside: avoid; break-inside: avoid; }
+  tfoot td { font-weight: 800; border-top: 2px solid #000000; background: #ffffff !important; color: #000000 !important; }
+  .sum-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; page-break-inside: avoid; }
+  .sum-card { border: 1px solid #000000; border-radius: 8px; padding: 9px 11px; font-size: 11px; color: #000000; background: #ffffff !important; }
+  .sum-card b { display: block; font-size: 15px; margin-top: 2px; color: #000000 !important; }
+  .equation { font-size: 12px; line-height: 2; border-top: 2px solid #000000; padding-top: 10px; margin-top: 8px; page-break-inside: avoid; color: #000000; }
+  .eq-high { color: #b91c1c !important; font-weight: 700; }
+  .eq-low  { color: #b45309 !important; font-weight: 700; }
+  .eq-ok   { color: #047857 !important; font-weight: 700; }
+  .note { border-top: 1px dashed #6b7280; margin-top: 16px; padding-top: 10px; font-size: 12px; color: #000000; page-break-inside: avoid; }
+  .footer { margin-top: 34px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 12px; color: #000000; page-break-inside: avoid; }
+  .footer .sign { text-align: center; }
+  .footer .line { width: 150px; border-top: 1px solid #374151; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="title">
+    <div><h1>تقرير مراجعة فاتورة العميل ومقارنة أسعار البيع</h1></div>
+    <div class="meta">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}</div>
+  </div>
+  <div class="meta">
+    <div><b>العميل:</b> ${esc(customer)} &nbsp;|&nbsp; <b>رقم الفاتورة:</b> ${esc(meta.invoiceNo || '—')}</div>
+    <div><b>تاريخ الفاتورة:</b> ${esc(meta.date || todayStr())} &nbsp;|&nbsp; <b>القائمة المعتمدة:</b> ${esc(activeListName())}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>رقم الصنف</th><th>اسم المنتج</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th>
+        <th>إجمالي المبلغ</th><th>السعر المعتمد</th><th>فرق الوحدة</th><th>إجمالي الفرق</th><th>المراجعة</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHTML || '<tr><td colspan="11" style="text-align:center">لا توجد بنود</td></tr>'}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4">إجمالي البنود (${State.items.length})</td>
+        <td>${fmtNum(qtySum)}</td>
+        <td></td>
+        <td>${fmtNum(t.invoiceTotal)}</td>
+        <td>${fmtNum(t.expectedTotal)}</td>
+        <td colspan="2">${signedMoney(s.netDiff)}</td>
+        <td>${isHigh ? 'زيادة صافية' : isLow ? 'انخفاض صافٍ' : 'متوازن'}</td>
+      </tr>
+    </tfoot>
+  </table>
+  ${buildPrintTotalsHTML()}
+  ${meta.notes ? `<div class="note"><b>ملاحظات:</b> ${esc(meta.notes)}</div>` : ''}
+  <div class="footer">
+    <div class="sign">توقيع المراجع<div class="line"></div></div>
+    <div class="sign">خاتم الشركة<div class="line"></div></div>
+    <div class="sign">توقيع المستلم<div class="line"></div></div>
+  </div>
+</body>
+</html>`;
+  }
+
+  /* 4) نافذة طباعة مؤقتة معزولة (تُنشأ مرة واحدة وتُعاد الخدمة) */
+  let _printFrame = null;
+  function getPrintFrame() {
+    if (_printFrame && _printFrame.contentDocument) return _printFrame;
+    _printFrame = document.createElement('iframe');
+    _printFrame.style.cssText = 'display:none; position:fixed; width:0; height:0; border:0; visibility:hidden;';
+    _printFrame.setAttribute('aria-hidden', 'true');
+    _printFrame.setAttribute('title', 'منطقة طباعة تقرير الفاتورة');
+    document.body.appendChild(_printFrame);
+    return _printFrame;
+  }
+
+  /* 5) الدالة الأم — هندسة الطباعة الكاملة من البناء إلى الحقن إلى الطباعة */
+  async function printInvoiceReport() {
     if (!State.items.length) { toast('لا توجد بنود للطباعة بعد', 'error'); return; }
-    const host = $('#print-area');
-    if (!host) { toast('عنصر منطقة الطباعة مفقود', 'error'); return; }
-    // 1) حقن قالب التقرير (ترويسة + إجماليات + صفوف البنود) في الحاوية المخصصة
-    host.innerHTML = buildPrintHTML();
-    // 2) إجبار إعادة الحساب والتخطيط بعد الإدراج
-    void host.offsetHeight;
-    // 3) تحقق قبل الطباعة: يجب أن يكون <tbody> قد امتلأ بصفوف فعلية
-    const tbody = host.querySelector('tbody');
-    const injected = tbody ? tbody.children.length : 0;
+    const frame = getPrintFrame();
+    const html = buildPrintDocumentHTML();      // (أ) بناء الهيكل الكامل مع الصفوف
+    const doc = frame.contentDocument;
+    doc.open();                                 // (ب) حقن المستند المعزول في نافذة الطباعة
+    doc.write(html);
+    doc.close();
+
+    // (ج) انتظار تحميل المستند ثم التحقق من امتلاء tbody بصفوف فعلية
+    await new Promise((resolve) => {
+      if (doc.readyState === 'complete') resolve();
+      else { frame.onload = resolve; setTimeout(resolve, 300); }
+    });
+    const tbody = doc.querySelector('table tbody');
+    const injected = tbody ? tbody.querySelectorAll('tr').length : 0;
     if (!injected) {
-      toast(`تعذّر توليد صفوف البنود (0 صف من ${State.items.length} بند)`, 'error');
+      toast(`تعذّر حقن صفوف البنود (0 صف من ${State.items.length} بند)`, 'error');
       return;
     }
     console.log(`طباعة: ${injected} صف بنود من ${State.items.length} بند`);
-    // 4) فتح نافذة الطباعة بعد اكتمال الرسم (لا window.print قبل الحقن أبداً)
-    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => window.print(), 20)));
+
+    // (د) ترك دراسة التخطيط راحة ثم الطباعة من نافذة معزولة (عناصر الواجهة كلها خارجها)
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
   }
 
   /* ─────────────────── مقارنة سحابية: موزع ضد شركة ─────────────────── */
@@ -1149,7 +1213,7 @@
       copyText(reportToTSV());
     });
     $('#btn-export-xlsx-report').addEventListener('click', exportXlsxReport);
-    $('#btn-print').addEventListener('click', printReport);
+    $('#btn-print').addEventListener('click', printInvoiceReport);
     $('#btn-new-invoice').addEventListener('click', newInvoiceClick);
 
     // اللصق السريع — الفاتورة
@@ -1300,5 +1364,8 @@
 
   document.addEventListener('DOMContentLoaded', init);
 
-  global.App = { switchTab, renderHistory, updateAllRowsAndSummary, reportToTSV, invoicesToTSV };
+  global.App = {
+  switchTab, renderHistory, updateAllRowsAndSummary, reportToTSV, invoicesToTSV,
+  printInvoiceReport, buildPrintDocumentHTML, buildPrintTotalsHTML, printRowHTML,
+};
 })(window);
