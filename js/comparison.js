@@ -1,8 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════════
    js/comparison.js — محرك المقارنة الذكية (Domain)
    • يشغّل المطابقة عبر Lists.matchInList (فهرس Map سريع)
-   • المؤشرات: مطابق 🟢، زيادة 🔺، وفر 🔻، غير مسجل ⚠️
-   • تلخيص مالي: إجمالي الفاتورة/المتوقع/الزيادة/الوفر/صافي الفرق/الانحراف
+   • المؤشرات: مطابق 🟢، زيادة 🔺، سعر منخفض خطير 🔻، غير مسجل ⚠️
+   • تلخيص مالي: إجمالي الفاتورة/المتوقع/الزيادة/الانخفاض/صافي الفرق/الانحراف
    ═══════════════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -10,7 +10,7 @@
   const { num } = global.Utils;
   const Lists = global.Lists;
 
-  const STATUS = { MATCH: 'match', HIGH: 'high', SAVE: 'save', UNKNOWN: 'unknown' };
+  const STATUS = { MATCH: 'match', HIGH: 'high', LOW: 'low', UNKNOWN: 'unknown' };
 
   /** تحليل بند واحد مقابل لستة معتمدة (كائن لستة أو null للاستعانة بالنشطة) */
   function analyzeItem(item, listOverride) {
@@ -36,8 +36,8 @@
     const totalDiff = unitDiff * qty;
     let status;
     if (Math.abs(unitDiff) < 1e-9) status = STATUS.MATCH;      // 🟢
-    else if (unitDiff > 0) status = STATUS.HIGH;               // 🔺
-    else status = STATUS.SAVE;                                 // 🔻
+    else if (unitDiff > 0) status = STATUS.HIGH;               // 🔺 زيادة في السعر (لصالح الشركة)
+    else status = STATUS.LOW;                                  // 🔻 سعر أقل من المعتمد (خسارة / انخفاض خطير)
 
     return { item, listItem, status, listPrice, unitDiff, totalDiff, expectedTotal: qty * listPrice, invoiceTotal };
   }
@@ -48,14 +48,15 @@
   /** تلخيص مالي للبنود */
   function summarize(items, listOverride) {
     const rows = analyzeBatch(items, listOverride);
-    const totals = { invoiceTotal: 0, expectedTotal: 0, knownInvoiceTotal: 0, highTotal: 0, saveTotal: 0, unknownCount: 0, unknownTotal: 0, matchCount: 0 };
+    const totals = { invoiceTotal: 0, expectedTotal: 0, knownInvoiceTotal: 0, highTotal: 0, lowTotal: 0, unknownCount: 0, unknownTotal: 0, matchCount: 0 };
     for (const r of rows) {
       totals.invoiceTotal += r.invoiceTotal;
       if (r.status === STATUS.UNKNOWN) { totals.unknownCount++; totals.unknownTotal += r.invoiceTotal; continue; }
       totals.expectedTotal += r.expectedTotal;
       totals.knownInvoiceTotal += r.invoiceTotal;
       if (r.status === STATUS.HIGH) totals.highTotal += r.totalDiff;
-      if (r.status === STATUS.SAVE) totals.saveTotal += Math.abs(r.totalDiff);
+      // البيع دون السعر المعتمد = خسارة/تجاوز: يُجمع كقيمة موجبة للتنبيه (لا يُطلق عليه "وفر")
+      if (r.status === STATUS.LOW) totals.lowTotal += Math.abs(r.totalDiff);
       if (r.status === STATUS.MATCH) totals.matchCount++;
     }
     const netDiff = totals.knownInvoiceTotal - totals.expectedTotal;
@@ -67,7 +68,7 @@
     switch (status) {
       case STATUS.MATCH: return '🟢 مطابق';
       case STATUS.HIGH: return '🔺 زيادة في السعر';
-      case STATUS.SAVE: return '🔻 وفر / انخفاض';
+      case STATUS.LOW: return '🔻 سعر منخفض خطير';
       default: return '⚠️ غير مسجل بالقائمة';
     }
   };
@@ -75,7 +76,7 @@
     switch (status) {
       case STATUS.MATCH: return 'مطابق';
       case STATUS.HIGH: return 'زيادة في السعر';
-      case STATUS.SAVE: return 'وفر / انخفاض';
+      case STATUS.LOW: return 'سعر منخفض خطير';
       default: return 'غير مسجل بالقائمة';
     }
   };

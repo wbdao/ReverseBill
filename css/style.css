@@ -92,11 +92,11 @@
 }
 .status-match   { background: #d1fae5; color: #047857; }
 .status-high    { background: #ffe4e6; color: #be123c; }
-.status-save    { background: #e0f2fe; color: #0369a1; }
+.status-low     { background: #ffedd5; color: #c2410c; border: 1px solid #fdba74; } /* تحذير: بيع دون المعتمد */
 .status-unknown { background: #fef3c7; color: #b45309; }
 
 .clr-high    { color: #e11d48; font-weight: 700; }
-.clr-save    { color: #0284c7; font-weight: 700; }
+.clr-low     { color: #ea580c; font-weight: 700; }
 .clr-neutral { color: #64748b; }
 
 /* حركات */
@@ -242,7 +242,7 @@ tbody tr { animation: fadeSlide .2s ease-out; }
   }
   .print-area .pr-equation .eq-ok  { color: #047857; font-weight: 700; }
   .print-area .pr-equation .eq-high { color: #be123c; font-weight: 700; }
-  .print-area .pr-equation .eq-save { color: #0369a1; font-weight: 700; }
+  .print-area .pr-equation .eq-low  { color: #c2410c; font-weight: 700; }
 
   /* ملاحظات + توقيعات */
   .print-area .pr-note {

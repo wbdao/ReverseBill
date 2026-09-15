@@ -290,7 +290,7 @@
   function diffHTML(value, status) {
     if (status === Comparison.STATUS.UNKNOWN) return '<span class="clr-neutral">—</span>';
     if (Math.abs(value) < 1e-9) return '<span class="clr-neutral">بدون فرق</span>';
-    const cls = status === Comparison.STATUS.HIGH ? 'clr-high' : 'clr-save';
+    const cls = status === Comparison.STATUS.HIGH ? 'clr-high' : status === Comparison.STATUS.LOW ? 'clr-low' : 'clr-neutral';
     return `<span class="${cls}">${signedMoney(value)}</span>`;
   }
   function itemRowHTML(item, index) {
@@ -441,13 +441,13 @@
     let netLabel = 'صافي الفرق';
     let netDot = 'bg-slate-400';
     if (s.netDiff > 0.004) { netLabel = 'زيادة صافية عن المعتمد'; netDot = 'bg-rose-500'; }
-    else if (s.netDiff < -0.004) { netLabel = 'وفر صافٍ'; netDot = 'bg-emerald-500'; }
+    else if (s.netDiff < -0.004) { netLabel = 'انخفاض صافٍ عن المعتمد'; netDot = 'bg-amber-500'; }
     const cards = [
       { label: 'إجمالي الفاتورة', value: money(t.invoiceTotal), dot: 'bg-indigo-500', sub: `${State.items.length} بند · ${money(s.expectedTotal)} معتمد` },
       { label: 'الإجمالي المعتمد (القائمة المختارة)', value: money(s.expectedTotal), dot: 'bg-slate-400', sub: `«${activeListName()}» للبنود المسجلة فقط` },
       { label: 'إجمالي زيادة الأسعار', value: money(t.highTotal), dot: 'bg-rose-500', sub: t.highTotal > 0.004 ? 'أعلى من السعر المعتمد' : 'لا توجد زيادات' },
-      { label: 'إجمالي الوفر عن المعتمد', value: money(t.saveTotal), dot: 'bg-sky-500', sub: t.saveTotal > 0.004 ? 'أقل من السعر المعتمد' : 'لا يوجد وفر' },
-      { label: netLabel, value: signedMoney(s.netDiff), dot: netDot, sub: `انحراف ${fmtNum(s.deviationPct)}% عن المعتمد`, valueColor: s.netDiff > 0.004 ? 'text-rose-600' : s.netDiff < -0.004 ? 'text-emerald-600' : '' },
+      { label: 'إجمالي الانخفاض عن المعتمد', value: money(t.lowTotal), dot: 'bg-amber-500', sub: t.lowTotal > 0.004 ? 'بيع دون السعر المعتمد — مراجعة عاجلة' : 'لا يوجد انخفاض', valueColor: t.lowTotal > 0.004 ? 'text-rose-600' : '' },
+      { label: netLabel, value: signedMoney(s.netDiff), dot: netDot, sub: `انحراف ${fmtNum(s.deviationPct)}% عن المعتمد`, valueColor: s.netDiff > 0.004 ? 'text-rose-600' : s.netDiff < -0.004 ? 'text-amber-600' : '' },
       { label: 'بنود غير مسجلة بالقائمة', value: `${t.unknownCount} بند`, dot: 'bg-amber-500', sub: money(t.unknownTotal) },
     ];
     $('#summary-grid').innerHTML = cards.map((c) => `
@@ -641,7 +641,7 @@
       let value = signedMoney(s.netDiff);
       let vc = 'text-slate-500';
       if (s.netDiff > 0.004) { badge = '<span class="status-badge status-high">🔺 زيادة صافية</span>'; vc = 'text-rose-600'; }
-      else if (s.netDiff < -0.004) { badge = '<span class="status-badge status-save">🔻 وفر صافٍ</span>'; vc = 'text-emerald-600'; }
+      else if (s.netDiff < -0.004) { badge = '<span class="status-badge status-low">🔻 انخفاض صافٍ عن المعتمد</span>'; vc = 'text-amber-600'; }
       return `
         <div class="card flex flex-wrap items-center justify-between gap-3">
           <div class="min-w-52">
@@ -690,7 +690,7 @@
     const summary = [
       '',
       ['', '', '', '', 'إجمالي الفاتورة', fmtNum(t.invoiceTotal), 'الإجمالي المعتمد', fmtNum(t.expectedTotal), '', ''].join('\t'),
-      ['', '', '', '', 'إجمالي الزيادة', fmtNum(t.highTotal), 'إجمالي الوفر', fmtNum(t.saveTotal), '', ''].join('\t'),
+      ['', '', '', '', 'إجمالي الزيادة', fmtNum(t.highTotal), 'إجمالي الانخفاض', fmtNum(t.lowTotal), '', ''].join('\t'),
       ['', '', '', '', 'صافي الفرق', signedNum(s.netDiff), 'بنود غير مسجلة', String(t.unknownCount), '', ''].join('\t'),
     ];
     return [header, ...rows, ...summary].join('\n');
@@ -760,21 +760,21 @@
       </tr>`;
     }).join('');
 
-    const isHigh = s.netDiff > 0.004, isSave = s.netDiff < -0.004;
+    const isHigh = s.netDiff > 0.004, isLow = s.netDiff < -0.004;
     const netBadge = isHigh
       ? `<span class="eq-high">زيادة صافية عن المعتمد: ${money(s.netDiff)}</span>`
-      : isSave
-        ? `<span class="eq-save">وفر صافٍ عن المعتمد: ${money(Math.abs(s.netDiff))}</span>`
+      : isLow
+        ? `<span class="eq-low">انخفاض صافٍ عن المعتمد: ${money(Math.abs(s.netDiff))}</span>`
         : `<span class="eq-ok">الفاتورة متوازنة مع المعتمد</span>`;
 
-    // بطاقات الملخص النهائي (إجمالي الفاتورة / الزيادة / الوفر / عدد البنود)
+    // بطاقات الملخص النهائي (إجمالي الفاتورة / الزيادة / الانخفاض / عدد البنود) — الانخفاض بتلوين تحذيري
     const sumCards = [
       { label: 'إجمالي الفاتورة', value: money(t.invoiceTotal) },
       { label: 'إجمالي زيادة الأسعار', value: money(t.highTotal) },
-      { label: 'إجمالي الوفر عن المعتمد', value: money(t.saveTotal) },
+      { label: 'إجمالي الانخفاض عن المعتمد', value: money(t.lowTotal), warn: true },
       { label: 'عدد البنود', value: `${State.items.length} بند` },
     ];
-    const sumHTML = sumCards.map((c) => `<div class="pr-card"><span>${c.label}</span><b>${c.value}</b></div>`).join('');
+    const sumHTML = sumCards.map((c) => `<div class="pr-card"><span>${c.label}</span><b${c.warn ? ' style="color:#c2410c"' : ''}>${c.value}</b></div>`).join('');
 
     const customer = meta.customer !== undefined && meta.customer !== null ? meta.customer : meta.vendor || '—';
     return `
@@ -802,7 +802,7 @@
             <td>${fmtNum(t.invoiceTotal)}</td>
             <td>${fmtNum(t.expectedTotal)}</td>
             <td colspan="2">${signedMoney(s.netDiff)}</td>
-            <td>${isHigh ? 'زيادة صافية' : isSave ? 'وفر صافٍ' : 'متوازن'}</td>
+            <td>${isHigh ? 'زيادة صافية' : isLow ? 'انخفاض صافٍ' : 'متوازن'}</td>
           </tr>
         </tfoot>
       </table>
@@ -963,7 +963,7 @@
     for (const x of rows) {
       if (x.status === Comparison.STATUS.MATCH) stats.matched++;
       else if (x.status === Comparison.STATUS.HIGH) { stats.high++; stats.highTotal += x.unitDiff; }
-      else if (x.status === Comparison.STATUS.SAVE) { stats.save++; stats.saveTotal += Math.abs(x.unitDiff); }
+      else if (x.status === Comparison.STATUS.LOW) { stats.save++; stats.saveTotal += Math.abs(x.unitDiff); }
       else stats.unknown++;
     }
     State.cloudCompareRows = rows;
@@ -996,7 +996,7 @@
       const n = cloudComparePage * pageSize + i + 1;
       const dx = x.status === Comparison.STATUS.UNKNOWN ? '<span class="clr-neutral">—</span>'
         : Math.abs(x.unitDiff) < 1e-9 ? '<span class="clr-neutral">بدون فرق</span>'
-        : `<span class="${x.status === Comparison.STATUS.HIGH ? 'clr-high' : 'clr-save'}">${signedMoney(x.unitDiff)}</span>`;
+        : `<span class="${x.status === Comparison.STATUS.HIGH ? 'clr-high' : 'clr-low'}">${signedMoney(x.unitDiff)}</span>`;
       return `<tr class="border-t border-slate-100 hover:bg-slate-50/70">
         <td class="py-2 px-3 text-slate-400 text-xs font-bold">${n}</td>
         <td class="py-2 px-3 text-xs" dir="ltr">${esc(x.item.itemNumber || '—')}</td>
@@ -1030,7 +1030,7 @@
     const st = State.cloudCompareStats || {};
     return [header, ...body,
       '',
-      ['مطابق', String(st.matched || 0), '', 'زيادة', `${st.high || 0} (${signedNum(st.highTotal || 0)})`, 'وفر', `${st.save || 0} (-${fmtNum(st.saveTotal || 0)})`, 'غير مسجل', String(st.unknown || 0)].join('\t'),
+      ['مطابق', String(st.matched || 0), '', 'زيادة', `${st.high || 0} (${signedNum(st.highTotal || 0)})`, 'انخفاض', `${st.save || 0} (-${fmtNum(st.saveTotal || 0)})`, 'غير مسجل', String(st.unknown || 0)].join('\t'),
     ].join('\n');
   }
 

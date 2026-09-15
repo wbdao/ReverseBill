@@ -90,7 +90,7 @@
     items: [
       { itemNumber: 'T-1001', name: 'سكر 1 كجم', unit: 'كيس', quantity: 10, unitPrice: 30 },          // 🟢 مطابق
       { itemNumber: 'T-1003', name: 'زيت عباد الشمس 1 لتر', unit: 'عبوة', quantity: 5, unitPrice: 75 }, // 🔺 زيادة
-      { itemNumber: 'T-1006', name: 'لبن 1 لتر', unit: 'عبوة', quantity: 8, unitPrice: 24 },            // 🔻 وفر
+      { itemNumber: 'T-1006', name: 'لبن 1 لتر', unit: 'عبوة', quantity: 8, unitPrice: 24 },            // 🔻 انخفاض خطير
       { itemNumber: 'T-1005', name: 'شاي 500 جم', unit: 'علبة', quantity: 4, unitPrice: 100 },          // 🟢 مطابق
       { itemNumber: 'T-1011', name: 'قهوة تركية 250 جم', unit: 'عبوة', quantity: 3, unitPrice: 88 },     // ⚠️ غير مسجل
     ],
