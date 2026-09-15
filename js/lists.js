@@ -53,26 +53,29 @@
     };
   }
 
+  /* --- إضافة صنف إلى فهرس Map (يُستخدم عند البناء الضخم وأثناء الحشو) --- */
+  function indexAdd(idx, it) {
+    const { nc, nm, nu } = itemNorm(it);
+    if (nc) {
+      if (!idx.byCode.has(nc)) idx.byCode.set(nc, []);
+      idx.byCode.get(nc).push(it);
+      const key = nc + '\u0000' + nu;
+      if (!idx.codeUnit.has(key)) idx.codeUnit.set(key, it);
+    }
+    if (nm) {
+      if (!idx.byName.has(nm)) idx.byName.set(nm, []);
+      idx.byName.get(nm).push(it);
+      const key = nm + '\u0000' + nu;
+      if (!idx.nameUnit.has(key)) idx.nameUnit.set(key, it);
+    }
+  }
+
   /* --- بناء فهرس Map للبحث السريع على لستة كبيرة --- */
   function buildIndex(items) {
-    const byCode = new Map(), byName = new Map(), codeUnit = new Map(), nameUnit = new Map();
-    if (!items || !items.length) return { byCode, byName, codeUnit, nameUnit };
-    for (const it of items) {
-      const { nc, nm, nu } = itemNorm(it);
-      if (nc) {
-        if (!byCode.has(nc)) byCode.set(nc, []);
-        byCode.get(nc).push(it);
-        const key = nc + '\u0000' + nu;
-        if (!codeUnit.has(key)) codeUnit.set(key, it);
-      }
-      if (nm) {
-        if (!byName.has(nm)) byName.set(nm, []);
-        byName.get(nm).push(it);
-        const key = nm + '\u0000' + nu;
-        if (!nameUnit.has(key)) nameUnit.set(key, it);
-      }
-    }
-    return { byCode, byName, codeUnit, nameUnit };
+    const idx = { byCode: new Map(), byName: new Map(), codeUnit: new Map(), nameUnit: new Map() };
+    if (!items || !items.length) return idx;
+    for (const it of items) indexAdd(idx, it);
+    return idx;
   }
 
   /* --- بيانات اللستة التي ستُبنى على أساسها المطابقة --- */
@@ -320,21 +323,83 @@
   };
 
   /* ================= إدخال / استيراد ضخم (بأجزاء) ================= */
+  /* --- بحث مكرّر من الفهرس (مع مراعاة الزيادات المضافة أثناء الحشو) --- */
+  function lookupItem(idx, items, item) {
+    if (!idx) return matchInList(items, item.itemNumber, item.name, item.unit);
+    const nc = normalizeNum(item.itemNumber);
+    const nm = normalizeName(item.name);
+    const nu = normalizeUnit(item.unit);
+    if (nc) {
+      const key = nc + '\u0000' + nu;
+      if (idx.codeUnit.has(key)) return idx.codeUnit.get(key);
+      const arr = idx.byCode.get(nc);
+      if (arr && arr.length) {
+        if (nu) { const byU = arr.filter((it) => normalizeUnit(it.unit) === nu); if (byU.length) return byU[0]; }
+        return arr[0];
+      }
+      if (nm) { const nArr = idx.byName.get(nm); if (nArr && nArr.length) return nArr[0]; }
+      return null;
+    }
+    if (nm) {
+      const key = nm + '\u0000' + nu;
+      if (idx.nameUnit.has(key)) return idx.nameUnit.get(key);
+      const arr = idx.byName.get(nm);
+      if (arr && arr.length) {
+        if (nu) { const byU = arr.filter((it) => normalizeUnit(it.unit) === nu); if (byU.length) return byU[0]; }
+        return arr[0];
+      }
+      return null;
+    }
+    return null;
+  }
+
+  /* --- قلب الاستيراد: يحشر شريحة rows على نفس الفهرس المبني مرة واحدة --- */
+  function importRowsCore(l, rows, start, end) {
+    const D = dataOf(l);
+    const idx = D.idx;
+    let added = 0, updated = 0;
+    for (let i = start; i < end; i++) {
+      const item = buildItem(rows[i]);
+      if (!item.name && !item.itemNumber) continue;
+      const dup = lookupItem(idx, D.items, item);
+      if (dup) { Object.assign(dup, item, { id: dup.id }); updated++; }
+      else { l.items.push(item); if (idx) indexAdd(idx, item); added++; }
+    }
+    return { added, updated };
+  }
+
   /**
    * استيراد صفوف {itemNumber,name,unit,price} إلى لستة محددة مع تحديث المكررات.
-   * يستخدم فهرس المطابقة لتفادي البحث الخطي أثناء الحشو الكبير.
+   * يستخدم فهرس المطابقة لتفادي البحث الخطي أثناء الحشو (بدون إعادة بناء لكل صف).
    */
   function importRows(listId, rows) {
     const l = getList(listId);
     if (!l) throw new Error('لستة الهدف غير موجودة.');
+    const res = importRowsCore(l, rows, 0, rows.length);
+    if (res.added || res.updated) { bump(l); persist(); }
+    return { added: res.added, updated: res.updated, total: l.items.length };
+  }
+
+  /**
+   * استيراد ضخم على أجزاء متقاطعة مع الخيط الرئيسي (عدم حجب الواجهة أثناء تحميل الخلفية).
+   * يقسم الحشو إلى شرائح ويُفرّغ الخيط بينها عبر requestIdleCallback (السقوط لـ setTimeout).
+   */
+  async function importRowsChunked(listId, rows, { chunkSize = 400, idle = true } = {}) {
+    const l = getList(listId);
+    if (!l) throw new Error('لستة الهدف غير موجودة.');
     let added = 0, updated = 0;
-    for (const r of rows) {
-      const item = buildItem(r);
-      if (!item.name && !item.itemNumber) continue;
-      const dup = matchInList(l, item.itemNumber, item.name, item.unit);
-      if (dup) { Object.assign(dup, item, { id: dup.id }); updated++; }
-      else { l.items.push(item); added++; }
-      bump(l);
+    const yieldNext = () => new Promise((res) => {
+      const ric = (typeof self !== 'undefined' ? self.requestIdleCallback : null)
+        || (typeof window !== 'undefined' ? window.requestIdleCallback : null);
+      if (idle && ric) ric(res, { timeout: 50 });
+      else setTimeout(res, 0);
+    });
+    let i = 0;
+    while (i < rows.length) {
+      const res = importRowsCore(l, rows, i, Math.min(rows.length, i + chunkSize));
+      added += res.added; updated += res.updated;
+      i += chunkSize;
+      if (i < rows.length) await yieldNext();
     }
     if (added || updated) { bump(l); persist(); }
     return { added, updated, total: l.items.length };
@@ -408,6 +473,6 @@
     itemsOf, ensureList, upsertItem, updateItem, removeItem, clearList, clearAllByReset, findItem, matchInList,
     reconcile,
     syncMemory, storeGet, findInStore,
-    importRows, exportAllJson, exportListJson, listToTSV, importAllJson, seed, buildIndex,
+    importRows, importRowsChunked, exportAllJson, exportListJson, listToTSV, importAllJson, seed, buildIndex,
   };
 })(window);

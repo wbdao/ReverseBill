@@ -135,7 +135,7 @@
     renderQuickList(); renderDatalist(); renderCloudLists(); renderListItems(); updateAllRowsAndSummary();
   }
 
-  async function fetchListFromConfig(slug, { silent = false } = {}) {
+  async function fetchListFromConfig(slug, { silent = false, defer = false } = {}) {
     const { cfg, list } = listBySlug(slug);
     if (!cfg || !list) return;
     if (!cfg.url) {
@@ -155,11 +155,16 @@
         ? await Sheets.fetchTab(cfg.url, { gid })
         : await Sheets.fetchTab(cfg.url, { name: cfg.tab || cfg.slug });
       const { rows } = Parser.extractListRows(rowsMatrix);
-      const res = Lists.importRows(list.id, rows);
+      // الخلفية تُدخل بأجزاء متقاطعة مع الخيط (idle)؛ النشطة فورياً وكلها مرّة واحدة
+      const res = defer
+        ? await Lists.importRowsChunked(list.id, rows)
+        : Lists.importRows(list.id, rows);
       list.syncedAt = new Date().toISOString();
       list.lastError = null;
       Storage.savePriceLists(Lists.all(), Lists.activeIdOf());
-      renderCloudLists(); renderListItems(); renderDatalist(); renderQuickList(); updateAllRowsAndSummary();
+      renderCloudLists();
+      // إعادة الرسم الكاملة للمسار النشط الفوري فقط؛ الخلفية تكتفي بحالة البطاقات
+      if (!defer) { renderListItems(); renderDatalist(); renderQuickList(); updateAllRowsAndSummary(); }
       if (!silent) toast(`✓ «${cfg.name}»: ${res.total} صنف${res.added ? ` · ${res.added} جديد` : ''}${res.updated ? ` · ${res.updated} تحديث` : ''}`);
     } catch (err) {
       list.lastError = (err && err.message) ? err.message : 'فشل الجلب';
@@ -169,28 +174,48 @@
     } finally {
       delete cloudBusy[slug];
       renderCloudLists();
-      runAllListCompareSilent();
+      if (!defer) runAllListCompareSilent();
     }
+  }
+
+  /* --- يحمّل اللستة النشطة فوراً ثم يجدول الباقي في الخلفية دون حجب الواجهة --- */
+  function scheduleCloudFetch(cfgs, onAllDone) {
+    const activeSlug = activeSlugOf();
+    const sorted = cfgs.slice().sort((a, b) => (a.slug === activeSlug ? -1 : 0) - (b.slug === activeSlug ? -1 : 0));
+    if (!sorted.length) return Promise.resolve();
+    const [first, ...rest] = sorted;
+    return (async () => {
+      await fetchListFromConfig(first.slug, { silent: true });
+      let done = 1;
+      const total = sorted.length;
+      const settle = () => {
+        done++;
+        if (done >= total) { runAllListCompareSilent(); if (onAllDone) onAllDone(); }
+      };
+      for (const cfg of rest) fetchListFromConfig(cfg.slug, { silent: true, defer: true }).then(settle, settle);
+      if (!rest.length) settle();
+    })();
   }
 
   async function refreshAllCloudLists() {
     const cfgs = (CONFIG.LISTS || []).filter((c) => c.url);
     if (!cfgs.length) { toast('لا توجد روابط مضبوطة بعد — افتح js/config.js', 'error'); return; }
     toast(`جارٍ تحديث ${cfgs.length} لستة...`, 'info');
-    for (const cfg of cfgs) await fetchListFromConfig(cfg.slug, { silent: true });
-    toast('اكتمل تحديث اللستات السحابية');
+    await scheduleCloudFetch(cfgs, () => toast('اكتمل تحديث اللستات السحابية'));
   }
 
   async function autoFetchCloudLists() {
     const hours = CONFIG.LISTS_REFRESH_HOURS || 6;
     const th = hours * 3600 * 1000;
+    const need = [];
     for (const cfg of CONFIG.LISTS || []) {
       const { list } = listBySlug(cfg.slug);
       if (!list || !cfg.url) continue;
       const stale = !list.syncedAt || (Date.now() - new Date(list.syncedAt).getTime()) > th;
       if (!stale && list.items.length) continue;
-      await fetchListFromConfig(cfg.slug, { silent: true });
+      need.push(cfg);
     }
+    if (need.length) await scheduleCloudFetch(need);
   }
 
   /* ─────────────────── المقارنة الشاملة بين كل اللستات ─────────────────── */

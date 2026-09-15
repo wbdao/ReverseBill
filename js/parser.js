@@ -29,11 +29,27 @@
     return rows;
   }
 
-  /* --- تحليل CSV حقيقي (مقتبس بـ ") من روابط Google Sheets المنشورة --- */
+  /* --- تحليل CSV حقيقي (مقتبس بـ ") من روابط Google Sheets المنشورة ---
+     محلل أحادي المسار: يُقص الخلايا ويزيل BOM ويهمل الأسطر الفارغة أثناء القراءة،
+     فلا يُنشئ مصفوفة صفوف وسيطة ولا خريطة كاملة ثانية (أضعف الذاكرة في المسارات الضخمة). */
   function parseCSV(text) {
     const rows = [];
     let row = [], field = '', inQuotes = false;
-    const pushField = () => { row.push(field); field = ''; };
+    let firstRow = true, firstCell = true;
+    const pushField = () => {
+      let f = field.trim();
+      if (firstCell && firstRow) f = f.replace(/^\uFEFF/, '');
+      row.push(f);
+      field = '';
+      firstCell = false;
+    };
+    const pushRow = () => {
+      // تُهمل الأسطر الفارغة فقط (خلية واحدة فارغة) كما في السلوك السابق
+      // يظل firstRow على حاله حتى يُدفع أول سطر فعلي (حتى يُزال BOM من الرأس الحقيقي)
+      if (row.length !== 1 || row[0] !== '') { rows.push({ cells: row }); firstRow = false; }
+      row = [];
+      firstCell = true;
+    };
     for (let i = 0; i < text.length; i++) {
       const ch = text[i];
       if (inQuotes) {
@@ -41,13 +57,12 @@
         else field += ch;
       } else if (ch === '"') inQuotes = true;
       else if (ch === ',' || ch === '،') pushField();
-      else if (ch === '\n') { pushField(); rows.push(row); row = []; }
+      else if (ch === '\n') { pushField(); pushRow(); }
       else if (ch === '\r') { /* تجاهل */ }
       else field += ch;
     }
-    if (field !== '' || row.length) { pushField(); rows.push(row); }
-    return rows.filter((r) => !(r.length === 1 && r[0].trim() === ''))
-      .map((r, i) => ({ cells: r.map((c) => (i === 0 ? c.replace(/^\uFEFF/, '') : c).trim()) }));
+    if (field !== '' || row.length) { pushField(); pushRow(); }
+    return rows;
   }
 
   /* --- كشف دور عمود من نص الرأس --- */
