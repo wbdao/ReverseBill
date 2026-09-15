@@ -173,13 +173,16 @@ tbody tr { animation: fadeSlide .2s ease-out; }
     border-collapse: collapse;
     font-size: 12px;
     margin: 12px 0;
+    color: #000000; /* كافة نصوص الجدول سوداء في الطباعة — تباين أقصى للورقة */
   }
   .print-area table thead {
     display: table-header-group; /* تكرار ترويسة الجدول عند امتداد الفاتورة لعدة صفحات */
   }
-  .print-area th {
-    background: #312e81 !important;
-    color: #fff !important;
+  .print-area table thead th {
+    /* الترويسة مقروءة دائماً: نص أسود خالص على خلفية بيضاء — لا تعتمد إطلاقاً
+       على "طباعة الخلفيات" (background graphics) التي قد تكون معطلة في الطابعة */
+    background: #ffffff !important;
+    color: #000000 !important;
     padding: 8px 10px;
     border: 1px solid #1e1b4b;
     font-size: 11px;
