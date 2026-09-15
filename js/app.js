@@ -905,42 +905,72 @@
 </html>`;
   }
 
-  /* 4) نافذة طباعة مؤقتة معزولة (تُنشأ مرة واحدة وتُعاد الخدمة) */
+  /* 4) نافذة طباعة احتياطية (لا تُستخدم إلا إذا حُجبت النوافذ المنبثقة) */
   let _printFrame = null;
   function getPrintFrame() {
     if (_printFrame && _printFrame.contentDocument) return _printFrame;
     _printFrame = document.createElement('iframe');
-    _printFrame.style.cssText = 'display:none; position:fixed; width:0; height:0; border:0; visibility:hidden;';
+    _printFrame.style.cssText = 'position: fixed; right: -10000px; top: 0; width: 0; height: 0; border: 0; visibility: hidden;';
     _printFrame.setAttribute('aria-hidden', 'true');
     _printFrame.setAttribute('title', 'منطقة طباعة تقرير الفاتورة');
     document.body.appendChild(_printFrame);
     return _printFrame;
   }
 
-  /* 5) الدالة الأم — هندسة الطباعة الكاملة من البناء إلى الحقن إلى الطباعة */
+  /* 5) الدالة الأم — الطباعة عبر نافذة منبثقة معزولة بالكامل (الأضمن عبر المتصفحات:
+        Chrome/Safari ينبو عن طباعة iframe بخاصية display:none فيطبع صفحة فارغة).
+        لا تُستدعى window.print إلا بعد التحقق من امتلاء <tbody> بصفوف فعلية. */
   async function printInvoiceReport() {
     if (!State.items.length) { toast('لا توجد بنود للطباعة بعد', 'error'); return; }
-    const frame = getPrintFrame();
-    const html = buildPrintDocumentHTML();      // (أ) بناء الهيكل الكامل مع الصفوف
-    const doc = frame.contentDocument;
-    doc.open();                                 // (ب) حقن المستند المعزول في نافذة الطباعة
-    doc.write(html);
-    doc.close();
+    const html = buildPrintDocumentHTML();               // (أ) الهيكل الكامل مع الصفوف
+    const rowsIn = (doc) => {                            // (ب) عدّاد صفوف الحقن
+      if (!doc) return 0;
+      const tb = doc.querySelector('table tbody');
+      return tb ? tb.querySelectorAll('tr').length : 0;
+    };
 
-    // (ج) انتظار تحميل المستند ثم التحقق من امتلاء tbody بصفوف فعلية
-    await new Promise((resolve) => {
-      if (doc.readyState === 'complete') resolve();
-      else { frame.onload = resolve; setTimeout(resolve, 300); }
-    });
-    const tbody = doc.querySelector('table tbody');
-    const injected = tbody ? tbody.querySelectorAll('tr').length : 0;
-    if (!injected) {
-      toast(`تعذّر حقن صفوف البنود (0 صف من ${State.items.length} بند)`, 'error');
+    // — المسار الأساسي: نافذة منبثقة within user-gesture (بدون iframe) —
+    let win = null;
+    try { win = window.open('', '_blank'); } catch (e) { win = null; }
+    if (win && win.document) {
+      const doc = win.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      if (doc.readyState !== 'complete') {
+        await new Promise((r) => { win.onload = r; setTimeout(r, 400); });
+      }
+      const injected = rowsIn(doc);
+      if (!injected) {
+        try { win.close(); } catch (e) { /* يتجاهل */ }
+        toast(`تعذّر حقن صفوف البنود (0 من ${State.items.length})`, 'error');
+        return;
+      }
+      console.log(`طباعة: ${injected} صف بنود من ${State.items.length} بند`);
+      win.focus();
+      // مهلة قصيرة لاستقرار التخطيط ثم الطباعة وإغلاق النافذة لاحقاً تلقائياً
+      setTimeout(() => {
+        try {
+          win.print();
+          win.onafterprint = () => { try { win.close(); } catch (e) { /* يتجاهل */ } };
+        } catch (e) {
+          toast('تعذّر فتح نافذة الطباعة — اسمح بالنوافذ المنبثقة لهذا الموقع', 'error');
+          try { win.close(); } catch (e2) { /* يتجاهل */ }
+        }
+      }, 60);
       return;
     }
-    console.log(`طباعة: ${injected} صف بنود من ${State.items.length} بند`);
 
-    // (د) ترك دراسة التخطيط راحة ثم الطباعة من نافذة معزولة (عناصر الواجهة كلها خارجها)
+    // — السقوط: iframe خفي إن مُنعت النوافذ المنبثقة —
+    const frame = getPrintFrame();
+    const doc = frame.contentDocument;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    await new Promise((r) => { if (doc.readyState === 'complete') r(); else { frame.onload = r; setTimeout(r, 300); } });
+    const injected = rowsIn(doc);
+    if (!injected) { toast(`تعذّر حقن صفوف البنود (0 من ${State.items.length})`, 'error'); return; }
+    console.log(`طباعة (iframe): ${injected} صف بنود من ${State.items.length} بند`);
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
     frame.contentWindow.focus();
     frame.contentWindow.print();
