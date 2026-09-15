@@ -764,26 +764,41 @@
     const listName = activeListName();
     const qtySum = State.items.reduce((a, it) => a + (Number(it.quantity) || 0), 0);
 
-    // توليد صفوف <tr> ديناميكياً لكل بند من مصفوفة البنود الحالية (عبر محرك المقارنة)
+    // توليد صفوف <tr> ديناميكياً لكل بند من مصفوفة البنود الحالية (لا قالب ثابت)
+    // لكل بند: رقم الصنف، الاسم، الوحدة، الكمية، سعر الوحدة، إجمالي المبلغ،
+    // السعر المعتمد، فرق الوحدة، إجمالي الفرق، حالة المراجعة
     const rows = State.items.map((it, i) => {
-      const r = Comparison.analyzeItem(it);
-      const st = r.status;
-      const ud = st === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.unitDiff) < 1e-9 ? '—' : (r.unitDiff > 0 ? `+${fmtNum(r.unitDiff)}` : fmtNum(r.unitDiff)));
-      const td = st === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.totalDiff) < 1e-9 ? '—' : (r.totalDiff > 0 ? `+${fmtNum(r.totalDiff)}` : fmtNum(r.totalDiff)));
-      return `<tr>
-        <td>${i + 1}</td>
-        <td>${esc(it.itemNumber || '—')}</td>
-        <td>${esc(it.name || '—')}</td>
-        <td>${esc(it.unit || '—')}</td>
-        <td>${fmtNum(it.quantity)}</td>
-        <td>${fmtNum(it.unitPrice)}</td>
-        <td>${fmtNum(r.invoiceTotal)}</td>
-        <td>${r.listPrice == null ? '—' : fmtNum(r.listPrice)}</td>
-        <td>${ud}</td>
-        <td>${td}</td>
-        <td>${Comparison.statusText(st)}</td>
-      </tr>`;
-    }).join('');
+      try {
+        const r = Comparison.analyzeItem(it);
+        const st = r.status;
+        const ud = st === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.unitDiff) < 1e-9 ? '—' : (r.unitDiff > 0 ? `+${fmtNum(r.unitDiff)}` : fmtNum(r.unitDiff)));
+        const td = st === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.totalDiff) < 1e-9 ? '—' : (r.totalDiff > 0 ? `+${fmtNum(r.totalDiff)}` : fmtNum(r.totalDiff)));
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${esc(it.itemNumber || '—')}</td>
+          <td>${esc(it.name || '—')}</td>
+          <td>${esc(it.unit || '—')}</td>
+          <td>${fmtNum(it.quantity)}</td>
+          <td>${fmtNum(it.unitPrice)}</td>
+          <td>${fmtNum(r.invoiceTotal)}</td>
+          <td>${r.listPrice == null ? '—' : fmtNum(r.listPrice)}</td>
+          <td>${ud}</td>
+          <td>${td}</td>
+          <td>${Comparison.statusText(st)}</td>
+        </tr>`;
+      } catch (e) {
+        // بند معطوب لا يفرّغ الجدول كاملاً — صف احتياطي يُبقي التقرير مقروءاً
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${esc(it.itemNumber || '—')}</td>
+          <td>${esc(it.name || '—')}</td>
+          <td>${esc(it.unit || '—')}</td>
+          <td>${fmtNum(it.quantity)}</td>
+          <td>${fmtNum(it.unitPrice)}</td>
+          <td colspan="5">بيانات غير مكتملة</td>
+        </tr>`;
+      }
+    }).join('');;
 
     const isHigh = s.netDiff > 0.004, isLow = s.netDiff < -0.004;
     const netBadge = isHigh
@@ -850,9 +865,21 @@
   function printReport() {
     if (!State.items.length) { toast('لا توجد بنود للطباعة بعد', 'error'); return; }
     const host = $('#print-area');
-    host.innerHTML = buildPrintHTML();      // 1) توليد الصفوف ديناميكياً من مصفوفة البنود الحالية
-    void host.offsetHeight;                 // 2) إجبار إعادة الحساب والتخطيط بعد الإدراج
-    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => window.print(), 20))); // 3) فتح الطباعة بعد اكتمال الرسم
+    if (!host) { toast('عنصر منطقة الطباعة مفقود', 'error'); return; }
+    // 1) حقن قالب التقرير (ترويسة + إجماليات + صفوف البنود) في الحاوية المخصصة
+    host.innerHTML = buildPrintHTML();
+    // 2) إجبار إعادة الحساب والتخطيط بعد الإدراج
+    void host.offsetHeight;
+    // 3) تحقق قبل الطباعة: يجب أن يكون <tbody> قد امتلأ بصفوف فعلية
+    const tbody = host.querySelector('tbody');
+    const injected = tbody ? tbody.children.length : 0;
+    if (!injected) {
+      toast(`تعذّر توليد صفوف البنود (0 صف من ${State.items.length} بند)`, 'error');
+      return;
+    }
+    console.log(`طباعة: ${injected} صف بنود من ${State.items.length} بند`);
+    // 4) فتح نافذة الطباعة بعد اكتمال الرسم (لا window.print قبل الحقن أبداً)
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => window.print(), 20)));
   }
 
   /* ─────────────────── مقارنة سحابية: موزع ضد شركة ─────────────────── */
