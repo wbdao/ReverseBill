@@ -1294,11 +1294,11 @@
     $('#btn-clear-paste-invoice').addEventListener('click', () => { $('#paste-invoice').value = ''; });
     $('#btn-paste-sample-invoice').addEventListener('click', () => {
       $('#paste-invoice').value =
-        'T-1001\tسكر 1 كجم\tكيس\t10\t30\t300\n' +
-        'T-1003\tزيت عباد الشمس 1 لتر\tعبوة\t5\t75\t375\n' +
-        'T-1006\tلبن 1 لتر\tعبوة\t8\t24\t192\n' +
-        'T-1005\tشاي 500 جم\tعلبة\t4\t100\t400\n' +
-        'T-1011\tقهوة تركية 250 جم\tعبوة\t3\t88\t264';
+        'T-1001\tسكر 1 كجم\tكيس\t10\t30\t2\t5\n' +
+        'T-1003\tزيت عباد الشمس 1 لتر\tعبوة\t5\t75\t0\t0\n' +
+        'T-1006\tلبن 1 لتر\tعبوة\t8\t24\t1\t0\n' +
+        'T-1005\tشاي 500 جم\tعلبة\t4\t100\t0\t10\n' +
+        'T-1011\tقهوة تركية 250 جم\tعبوة\t3\t88\t0\t0';
     });
     $('#btn-xlsx-invoice').addEventListener('click', () => $('#xlsx-invoice-file').click());
     $('#xlsx-invoice-file').addEventListener('change', () => handleXlsxFile('#xlsx-invoice-file', '#paste-invoice', 'invoice', 'رتّبت الفاتورة'));

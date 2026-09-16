@@ -120,7 +120,8 @@
     if (n === 3) return { name: 0, qty: 1, unitPrice: 2 };
     if (n === 4) return { itemNo: 0, name: 1, qty: 2, unitPrice: 3 };
     if (n === 5) return { itemNo: 0, name: 1, unit: 2, qty: 3, unitPrice: 4 };
-    return { itemNo: 0, name: 1, unit: 2, qty: 3, unitPrice: 4, amount: 5 };
+    if (n === 6) return { itemNo: 0, name: 1, unit: 2, qty: 3, unitPrice: 4, discountValue: 5 };
+    return { itemNo: 0, name: 1, unit: 2, qty: 3, unitPrice: 4, discountValue: 5, discountPct: 6 };
   }
 
   /* --- بناء خريطة أعمدة اللستة (إن وُجدت رؤوس) --- */

@@ -133,12 +133,12 @@
         <p class="text-xs text-slate-600 mb-2">
           انسخ الجدول من Excel/السيستم ثم الصقه هنا بـ <b>Ctrl + V</b>، أو ارفع ملف Excel وسيتعبّأ هنا.
           يدعم تلقائياً ترتيب الأعمدة المعتاد:
-          <b>رقم الصنف ← اسم المنتج ← الوحدة ← الكمية ← سعر الوحدة ← إجمالي المبلغ</b>،
-          مع كشف رؤوس الأعمدة تلقائياً (Item No / Description / Unit / Qty / Unit Price / Amount).
+          <b>رقم الصنف ← اسم المنتج ← الوحدة ← الكمية ← سعر الوحدة ← خصم القيمة ← خصم النسبة</b>،
+          مع كشف رؤوس الأعمدة تلقائياً (Item No / Description / Unit / Qty / Unit Price / Discount Value / Discount %).
         </p>
         <textarea id="paste-invoice" dir="ltr" spellcheck="false"
           class="input font-mono text-sm h-40 leading-6"
-          placeholder='T-1001&#9;سكر 1 كجم&#9;كيس&#9;10&#9;30&#9;300&#10;&#10;مثال: حدد الجدول في Excel واضغط Ctrl+C ثم ضع المؤشر هنا واضغط Ctrl+V'></textarea>
+          placeholder='T-1001&#9;سكر 1 كجم&#9;كيس&#9;10&#9;30&#9;2&#9;5&#10;&#10;مثال: حدد الجدول في Excel واضغط Ctrl+C ثم ضع المؤشر هنا واضغط Ctrl+V'></textarea>
         <div class="flex flex-wrap gap-2 mt-2">
           <button id="btn-apply-paste-invoice" class="btn btn-primary"><i class="fa-solid fa-play"></i> إضافة البنود المنسوخة</button>
           <button id="btn-clear-paste-invoice" class="btn btn-ghost"><i class="fa-solid fa-eraser"></i> مسح المربع</button>
