@@ -468,11 +468,18 @@
       return;
     }
 
-    State.items.push({ id: genId('it'), itemNumber, name: name || itemNumber, unit, quantity: qty, unitPrice });
+    const discountValue = Math.max(0, parseNum($('#item-discount-value').value));
+    const discountPctRaw = $('#item-discount-pct').value.trim();
+    // خصم النسبة يُدخل كنسبة (1 = 1%) ويُخزن ككسر (0.01) للاتساق مع سحب السيستم
+    const discountPct = discountPctRaw === '' ? 0 : Math.max(0, parseNum(discountPctRaw) / 100);
+
+    State.items.push({ id: genId('it'), itemNumber, name: name || itemNumber, unit, quantity: qty, unitPrice, discountValue, discountPct });
     renderInvoiceItems();
     saveDraft();
     $('#item-qty').value = '1';
     $('#item-price').value = '';
+    $('#item-discount-value').value = '';
+    $('#item-discount-pct').value = '';
     $('#item-unit').value = $('#item-number').value = '';
     $('#item-name').value = '';
     $('#item-name').focus();
@@ -558,6 +565,7 @@
     $('#inv-customer').value = $('#inv-no').value = $('#inv-notes').value = '';
     $('#inv-date').value = todayStr();
     $('#item-name').value = $('#item-price').value = $('#item-unit').value = $('#item-number').value = '';
+    $('#item-discount-value').value = $('#item-discount-pct').value = '';
     $('#item-qty').value = '1';
     Invoices.clearDraft();
     renderInvoiceItems();
@@ -1237,7 +1245,7 @@
 
     // الإدخال اليدوي للبنود
     $('#btn-add-item').addEventListener('click', addItem);
-    ['#item-name', '#item-qty', '#item-price', '#item-unit', '#item-number'].forEach((sel) => {
+    ['#item-name', '#item-qty', '#item-price', '#item-unit', '#item-number', '#item-discount-value', '#item-discount-pct'].forEach((sel) => {
       $(sel).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } });
     });
 
