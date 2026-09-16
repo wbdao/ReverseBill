@@ -49,7 +49,7 @@
 
   <!-- ══════ الشريط العلوي ══════ -->
   <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200 shadow-sm">
-    <div class="max-w-7xl mx-auto px-4">
+    <div class="w-full px-4">
       <div class="flex flex-wrap items-center justify-between gap-3 py-3">
         <div class="flex items-center gap-3">
           <div class="w-11 h-11 rounded-2xl bg-indigo-600 text-white grid place-items-center font-black text-xl shadow-md shadow-indigo-200"><i class="fa-solid fa-file-invoice-dollar"></i></div>
@@ -68,7 +68,7 @@
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+  <main class="w-full px-4 py-5 space-y-5">
 
     <!-- ════════════════ عرض: الفاتورة ════════════════ -->
     <section id="view-invoice" data-view class="space-y-6">
@@ -162,25 +162,25 @@
           <p>لم تُضف أي بنود بعد — أضفها يدوياً بالأسفل أو الصقها من Excel/السيستم بالأعلى.</p>
         </div>
 
-        <div id="items-table-wrap" class="overflow-x-auto hidden">
-          <table class="w-full min-w-[1200px] text-sm">
+        <div id="items-table-wrap" class="overflow-x-auto hidden rounded-lg">
+          <table class="w-full min-w-[1500px] text-sm table-auto">
             <thead>
-              <tr class="text-slate-500 text-xs">
-                <th class="text-right py-2 px-3">#</th>
-                <th class="text-right py-2 px-3">رقم الصنف</th>
-                <th class="text-right py-2 px-3">اسم المنتج</th>
-                <th class="text-right py-2 px-3">الوحدة</th>
-                <th class="text-right py-2 px-3">الكمية</th>
-                <th class="text-right py-2 px-3">سعر الوحدة بالفاتورة</th>
-                <th class="text-right py-2 px-3">خصم القيمة</th>
-                <th class="text-right py-2 px-3">خصم النسبة</th>
-                <th class="text-right py-2 px-3">صافي السعر</th>
-                <th class="text-right py-2 px-3">إجمالي المبلغ</th>
-                <th class="text-right py-2 px-3">السعر المعتمد للعميل بالقائمة المختارة</th>
-                <th class="text-right py-2 px-3">فرق الوحدة</th>
-                <th class="text-right py-2 px-3">إجمالي الفرق</th>
-                <th class="text-right py-2 px-3">مؤشر المراجعة</th>
-                <th class="py-2 px-3"></th>
+              <tr class="text-slate-500 text-xs whitespace-nowrap">
+                <th class="text-right py-2.5 px-3">#</th>
+                <th class="text-right py-2.5 px-3">رقم الصنف</th>
+                <th class="text-right py-2.5 px-3 min-w-56">اسم المنتج</th>
+                <th class="text-right py-2.5 px-3">الوحدة</th>
+                <th class="text-right py-2.5 px-3">الكمية</th>
+                <th class="text-right py-2.5 px-3">سعر الوحدة</th>
+                <th class="text-right py-2.5 px-3">خصم القيمة</th>
+                <th class="text-right py-2.5 px-3">خصم النسبة</th>
+                <th class="text-right py-2.5 px-3">صافي السعر</th>
+                <th class="text-right py-2.5 px-3">إجمالي المبلغ</th>
+                <th class="text-right py-2.5 px-3">السعر المعتمد</th>
+                <th class="text-right py-2.5 px-3">فرق الوحدة</th>
+                <th class="text-right py-2.5 px-3">إجمالي الفرق</th>
+                <th class="text-right py-2.5 px-3">مؤشر المراجعة</th>
+                <th class="py-2.5 px-3"></th>
               </tr>
             </thead>
             <tbody id="items-table-body"></tbody>

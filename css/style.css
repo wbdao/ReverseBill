@@ -112,3 +112,15 @@ tbody tr { animation: fadeSlide .2s ease-out; }
 ::-webkit-scrollbar { height: 8px; width: 8px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* جدول بنود الفاتورة: ملء الشاشة بأعمدة واضحة */
+#items-table-wrap thead th {
+  background: #f1f5f9;
+  border-bottom: 2px solid #e2e8f0;
+  text-align: right;
+}
+#items-table-wrap thead th:last-child, #items-table-wrap td:last-child { text-align: center; }
+#items-table-body tr:nth-child(even) { background: #fafbfd; }
+#items-table-body tr:hover { background: #eef2ff; }
+#items-table-wrap th, #items-table-wrap td { vertical-align: middle; white-space: nowrap; }
+#items-table-body .cell-input { min-width: 0; }

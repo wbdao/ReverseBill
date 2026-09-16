@@ -330,7 +330,7 @@
                  data-field="itemNumber" data-id="${item.id}" autocomplete="off"
                  class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
         </td>
-        <td class="py-2 px-3 min-w-44">
+        <td class="py-2 px-3 min-w-56">
           <input type="text" value="${esc(item.name)}" list="product-names"
                  data-field="name" data-id="${item.id}" autocomplete="off"
                  class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
