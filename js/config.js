@@ -34,6 +34,8 @@ window.CONFIG = {
     unit: ['unit', 'uom', 'الوحدة', 'وحدة'],
     qty: ['quantity', 'qty', 'الكمية', 'كمية', 'العدد', 'عدد'],
     unitPrice: ['unit price', 'unitprice', 'unit cost', 'سعر الوحدة', 'سعر الشراء', 'السعر', 'سعر'],
+    discountValue: ['discount value', 'discountvalue', 'disc value', 'discount amount', 'discountamount', 'خصم القيمة', 'قيمة الخصم', 'قيمه الخصم', 'الخصم القيمي'],
+    discountPct: ['discount rate', 'discountrate', 'discount %', 'discount pct', 'discountpercent', 'discount percentage', 'خصم النسبة', 'نسبة الخصم', 'نسبه الخصم', 'الخصم النسبي'],
     amount: ['net amount', 'netamount', 'amount', 'total', 'net', 'الإجمالي', 'المبلغ', 'القيمة', 'إجمالي', 'قيمة'],
     price: ['price', 'السعر', 'سعر', 'سعر البيع'],
   },

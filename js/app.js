@@ -318,6 +318,8 @@
     const cls = status === Comparison.STATUS.HIGH ? 'clr-high' : status === Comparison.STATUS.LOW ? 'clr-low' : 'clr-neutral';
     return `<span class="${cls}">${signedMoney(value)}</span>`;
   }
+  // عرض نسبة الخصم كرقم بدون علامة % (1% تظهر 1) مع قص الفضلة العشرية المتكررة
+  const fmtPct = (p) => { const x = Math.round((num(p) * 100) * 100) / 100; return String(x); };
   function itemRowHTML(item, index) {
     const r = Comparison.analyzeItem(item);
     return `
@@ -348,6 +350,17 @@
                  data-field="unitPrice" data-id="${item.id}"
                  class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
         </td>
+        <td class="py-2 px-3 w-28">
+          <input type="number" min="0" step="any" value="${item.discountValue ? fmtNum(item.discountValue) : ''}"
+                 data-field="discountValue" data-id="${item.id}" placeholder="0.00"
+                 class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
+        </td>
+        <td class="py-2 px-3 w-24">
+          <input type="number" min="0" step="any" value="${item.discountPct ? fmtPct(item.discountPct) : ''}"
+                 data-field="discountPct" data-id="${item.id}" placeholder="0"
+                 class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
+        </td>
+        <td class="py-2 px-3 font-bold cell-net">${money(r.netUnit)}</td>
         <td class="py-2 px-3 font-bold cell-total">${money(r.invoiceTotal)}</td>
         <td class="py-2 px-3 text-slate-600 cell-list">${r.listPrice === null ? '<span class="clr-neutral">—</span>' : money(r.listPrice)}</td>
         <td class="py-2 px-3 cell-udiff">${diffHTML(r.unitDiff, r.status)}</td>
@@ -380,6 +393,7 @@
     const tr = document.querySelector(`#items-table-body tr[data-id="${id}"]`);
     if (!item || !tr) return;
     const r = Comparison.analyzeItem(item);
+    tr.querySelector('.cell-net').innerHTML = money(r.netUnit);
     tr.querySelector('.cell-total').innerHTML = money(r.invoiceTotal);
     tr.querySelector('.cell-list').innerHTML = r.listPrice === null ? '<span class="clr-neutral">—</span>' : money(r.listPrice);
     tr.querySelector('.cell-status').innerHTML = statusBadgeHTML(r);
@@ -416,6 +430,11 @@
       item.quantity = Math.max(0, parseNum(rawValue));
     } else if (field === 'unitPrice') {
       item.unitPrice = Math.max(0, parseNum(rawValue));
+    } else if (field === 'discountValue') {
+      item.discountValue = Math.max(0, parseNum(rawValue));
+    } else if (field === 'discountPct') {
+      // الادخال اليدوي بالنسب (1 = 1%) يُخزَّن ككسر (0.01) للاتساق مع سحب السيستم
+      item.discountPct = Math.max(0, parseNum(rawValue) / 100);
     }
     updateRowUI(id);
     updateSummary();
@@ -513,6 +532,8 @@
       unit: String(it.unit || '').trim(),
       quantity: it.quantity ?? 1,
       unitPrice: Number(it.unitPrice) || 0,
+      discountValue: Number(it.discountValue) || 0,
+      discountPct: Number(it.discountPct) || 0,
     })) : [];
     // استعادة الفاتورة قيد التعديل إن كانت لا تزال موجودة في السجل (لا نعيدها لفاتورة محذوفة)
     State.editingInvoiceId = draft.invoiceId && Invoices.getById(draft.invoiceId) ? draft.invoiceId : null;
@@ -553,7 +574,7 @@
     const inv = Invoices.getById(id);
     if (!inv) return;
     const proceed = () => {
-      State.items = inv.items.map((it) => ({ id: genId('it'), itemNumber: it.itemNumber || '', name: it.name, unit: it.unit || '', quantity: it.quantity, unitPrice: it.unitPrice }));
+      State.items = inv.items.map((it) => ({ id: genId('it'), itemNumber: it.itemNumber || '', name: it.name, unit: it.unit || '', quantity: it.quantity, unitPrice: it.unitPrice, discountValue: Number(it.discountValue) || 0, discountPct: Number(it.discountPct) || 0 }));
       if (inv.listId && Lists.getList(inv.listId)) { Lists.setActive(inv.listId); renderQuickList(); renderCloudLists(); renderDatalist(); }
       State.editingInvoiceId = inv.id;
       updateSaveButton();
@@ -700,35 +721,37 @@
   function reportToTSV() {
     const s = Comparison.summarize(State.items);
     const t = s.totals;
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'].join('\t');
+    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'].join('\t');
     const rows = State.items.map((it) => {
       const r = Comparison.analyzeItem(it);
       const ud = r.status === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.unitDiff) < 1e-9 ? '0.00' : signedNum(r.unitDiff));
       const td = r.status === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.totalDiff) < 1e-9 ? '0.00' : signedNum(r.totalDiff));
       return [
         it.itemNumber || '—', it.name, it.unit || '—',
-        fmtNum(it.quantity), fmtNum(it.unitPrice), fmtNum(r.invoiceTotal),
+        fmtNum(it.quantity), fmtNum(it.unitPrice),
+        fmtNum(it.discountValue || 0), fmtPct(it.discountPct || 0), fmtNum(r.netUnit),
+        fmtNum(r.invoiceTotal),
         r.listPrice === null ? '—' : fmtNum(r.listPrice),
         ud, td, Comparison.statusText(r.status),
       ].join('\t');
     });
     const summary = [
       '',
-      ['', '', '', '', 'إجمالي الفاتورة', fmtNum(t.invoiceTotal), 'الإجمالي المعتمد', fmtNum(t.expectedTotal), '', ''].join('\t'),
-      ['', '', '', '', 'إجمالي الزيادة', fmtNum(t.highTotal), 'إجمالي الانخفاض', fmtNum(t.lowTotal), '', ''].join('\t'),
-      ['', '', '', '', 'صافي الفرق', signedNum(s.netDiff), 'بنود غير مسجلة', String(t.unknownCount), '', ''].join('\t'),
+      ['', '', '', '', 'إجمالي الفاتورة', '', '', '', fmtNum(t.invoiceTotal), 'الإجمالي المعتمد', '', '', fmtNum(t.expectedTotal)].join('\t'),
+      ['', '', '', '', 'إجمالي الزيادة', '', '', '', fmtNum(t.highTotal), 'إجمالي الانخفاض', '', '', fmtNum(t.lowTotal)].join('\t'),
+      ['', '', '', '', 'صافي الفرق', '', '', '', signedNum(s.netDiff), 'بنود غير مسجلة', '', '', String(t.unknownCount)].join('\t'),
     ];
     return [header, ...rows, ...summary].join('\n');
   }
 
   /** مصفوفة خلايا لتصدير Excel مباشرة (أرقام حقيقية قابلة للحساب) */
   function reportToAOACells() {
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'];
+    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'];
     const body = State.items.map((it) => {
       const r = Comparison.analyzeItem(it);
       return [
         it.itemNumber || '', it.name, it.unit || '',
-        it.quantity, it.unitPrice, r.invoiceTotal,
+        it.quantity, it.unitPrice, it.discountValue || 0, it.discountPct || 0, r.netUnit, r.invoiceTotal,
         r.listPrice === null ? '' : r.listPrice,
         r.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(r.unitDiff) < 1e-9 ? 0 : r.unitDiff),
         r.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(r.totalDiff) < 1e-9 ? 0 : r.totalDiff),
@@ -739,13 +762,16 @@
   }
 
   function invoicesToTSV() {
-    const header = ['العميل', 'رقم الفاتورة', 'التاريخ', 'رقم الصنف', 'المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'إجمالي البند'].join('\t');
+    const header = ['العميل', 'رقم الفاتورة', 'التاريخ', 'رقم الصنف', 'المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي البند'].join('\t');
     const rows = Invoices.getAll().flatMap((inv) =>
-      inv.items.map((it) => [
-        inv.customer !== undefined && inv.customer !== null ? inv.customer : inv.vendor || '', inv.invoiceNo || '', inv.date || '',
-        it.itemNumber || '', it.name || '', it.unit || '',
-        fmtNum(it.quantity), fmtNum(it.unitPrice), fmtNum((it.quantity || 0) * (it.unitPrice || 0)),
-      ].join('\t')));
+      inv.items.map((it) => {
+        const r = Comparison.analyzeItem(it);
+        return [
+          inv.customer !== undefined && inv.customer !== null ? inv.customer : inv.vendor || '', inv.invoiceNo || '', inv.date || '',
+          it.itemNumber || '', it.name || '', it.unit || '',
+          fmtNum(it.quantity), fmtNum(it.unitPrice), fmtNum(it.discountValue || 0), fmtPct(it.discountPct || 0), fmtNum(r.netUnit), fmtNum(r.invoiceTotal),
+        ].join('\t');
+      }));
     return [header, ...rows].join('\n');
   }
 
@@ -778,6 +804,9 @@
         <td>${esc(it.unit || '—')}</td>
         <td>${fmtNum(it.quantity)}</td>
         <td>${fmtNum(it.unitPrice)}</td>
+        <td>${fmtNum(it.discountValue || 0)}</td>
+        <td>${fmtPct(it.discountPct || 0)}</td>
+        <td>${fmtNum(r.netUnit)}</td>
         <td>${fmtNum(r.invoiceTotal)}</td>
         <td>${r.listPrice == null ? '—' : fmtNum(r.listPrice)}</td>
         <td>${fmtDiff(r.unitDiff)}</td>
@@ -793,7 +822,7 @@
         <td>${esc(it.unit || '—')}</td>
         <td>${fmtNum(it.quantity)}</td>
         <td>${fmtNum(it.unitPrice)}</td>
-        <td colspan="5">بيانات غير مكتملة</td>
+        <td colspan="8">بيانات غير مكتملة</td>
       </tr>`;
     }
   }
@@ -878,15 +907,15 @@
     <thead>
       <tr>
         <th>#</th><th>رقم الصنف</th><th>اسم المنتج</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th>
-        <th>إجمالي المبلغ</th><th>السعر المعتمد</th><th>فرق الوحدة</th><th>إجمالي الفرق</th><th>المراجعة</th>
+        <th>خصم القيمة</th><th>خصم النسبة</th><th>صافي السعر</th><th>إجمالي المبلغ</th><th>السعر المعتمد</th><th>فرق الوحدة</th><th>إجمالي الفرق</th><th>المراجعة</th>
       </tr>
     </thead>
-    <tbody>${rowsHTML || '<tr><td colspan="11" style="text-align:center">لا توجد بنود</td></tr>'}</tbody>
+    <tbody>${rowsHTML || '<tr><td colspan="14" style="text-align:center">لا توجد بنود</td></tr>'}</tbody>
     <tfoot>
       <tr>
         <td colspan="4">إجمالي البنود (${State.items.length})</td>
         <td>${fmtNum(qtySum)}</td>
-        <td></td>
+        <td></td><td></td><td></td><td></td>
         <td>${fmtNum(t.invoiceTotal)}</td>
         <td>${fmtNum(t.expectedTotal)}</td>
         <td colspan="2">${signedMoney(s.netDiff)}</td>
@@ -1219,9 +1248,15 @@
     });
     $('#items-table-body').addEventListener('change', (e) => {
       const input = e.target.closest('.cell-input');
-      if (input && (input.dataset.field === 'quantity' || input.dataset.field === 'unitPrice')) {
+      if (input && ['quantity', 'unitPrice', 'discountValue', 'discountPct'].includes(input.dataset.field)) {
         const item = State.items.find((i) => i.id === input.dataset.id);
-        if (item) input.value = input.dataset.field === 'quantity' ? item.quantity : item.unitPrice;
+        if (item) {
+          const f = input.dataset.field;
+          input.value = f === 'quantity' ? item.quantity
+            : f === 'unitPrice' ? item.unitPrice
+            : f === 'discountValue' ? fmtNum(item.discountValue)
+            : fmtPct(item.discountPct);
+        }
       }
     });
     $('#items-table-body').addEventListener('click', (e) => {

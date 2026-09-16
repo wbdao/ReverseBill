@@ -107,6 +107,7 @@
           itemNo: roles.itemNo, name: roles.name, unit: roles.unit, qty: roles.qty,
           unitPrice: roles.unitPrice !== undefined ? roles.unitPrice : roles.price,
           amount: roles.amount,
+          discountValue: roles.discountValue, discountPct: roles.discountPct,
         },
       };
     }
@@ -152,6 +153,8 @@
       const unit = cv(c, m.unit);
       const qtyRaw = cv(c, m.qty);
       const prRaw = cv(c, m.unitPrice);
+      const dvRaw = cv(c, m.discountValue);
+      const dpRaw = cv(c, m.discountPct);
       const key = name || itemNo;
       if (!key) { ignored++; return; }
       if (qtyRaw === '' || !isFinite(global.Utils.parseNum(qtyRaw))) { ignored++; return; }
@@ -163,7 +166,12 @@
         if (li) { price = global.Utils.num(li.price); autofilled++; }
         else { unknown++; } // لا يُهمَل الصف: يظهر للعرض كـ "غير مسجل بالقائمة" فيُصحَّح سعره يدوياً
       }
-      items.push({ itemNumber: itemNo, name: name || itemNo, unit, quantity: qty, unitPrice: price });
+      // خصم القيمة: مبلغ ثابت لكل وحدة. خصم النسبة: الكسر المتسق مع سحب السيستم.
+      // القيم > 1 تُعتبر نسباً مئوية صحيحة (1 = 1%) فتُقسَّم على 100 لتوحيد التخزين.
+      const discountValue = dvRaw === '' || !isFinite(global.Utils.parseNum(dvRaw)) ? 0 : Math.max(0, global.Utils.parseNum(dvRaw));
+      let discountPct = dpRaw === '' || !isFinite(global.Utils.parseNum(dpRaw)) ? 0 : global.Utils.parseNum(dpRaw);
+      if (discountPct > 1) discountPct = discountPct / 100;
+      items.push({ itemNumber: itemNo, name: name || itemNo, unit, quantity: qty, unitPrice: price, discountValue, discountPct });
     });
     return { items, ignored, autofilled, unknown };
   }

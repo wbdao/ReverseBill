@@ -12,11 +12,23 @@
 
   const STATUS = { MATCH: 'match', HIGH: 'high', LOW: 'low', UNKNOWN: 'unknown' };
 
-  /** تحليل بند واحد مقابل لستة معتمدة (كائن لستة أو null للاستعانة بالنشطة) */
+  /** صافي سعر الوحدة بعد الخصومات:
+      discountPct مُخزَّن ككسر (1% = 0.01) — الإدخال اليدوي يقسم قيمته على 100
+      ليتطابق مع سحب السيستم (الذي يأتي بالفعل ككسر). القيمة تُحدّ من الأسفل بصفر. */
+  function netUnitOf(item) {
+    const unit = num(item.unitPrice);
+    const pct = num(item.discountPct);
+    const value = num(item.discountValue);
+    return Math.max(0, unit * (1 - pct) - value);
+  }
+
+  /** تحليل بند واحد مقابل لستة معتمدة (كائن لستة أو null للاستعانة بالنشطة)
+      المقارنة تتم على صافي السعر بعد الخصم (وهو المبلغ الفعلي الذي يُدفع للعميل). */
   function analyzeItem(item, listOverride) {
     const qty = num(item.quantity);
     const unit = num(item.unitPrice);
-    const invoiceTotal = qty * unit;
+    const netUnit = netUnitOf(item);
+    const invoiceTotal = qty * netUnit;
     // لستة المقارنة: المعطاة صراحة → وإلا النشطة عبر مخزن الذاكرة المركزي window.appLists
     let listItem = null;
     if (!listOverride) {
@@ -29,17 +41,17 @@
     const listPrice = listItem !== null ? num(listItem.price) : null;
 
     if (listItem === null || listPrice === null) {
-      return { item, listItem: null, status: STATUS.UNKNOWN, listPrice: null, unitDiff: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal };
+      return { item, listItem: null, status: STATUS.UNKNOWN, listPrice: null, unitDiff: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit };
     }
 
-    const unitDiff = unit - listPrice;
+    const unitDiff = netUnit - listPrice;
     const totalDiff = unitDiff * qty;
     let status;
     if (Math.abs(unitDiff) < 1e-9) status = STATUS.MATCH;      // 🟢
     else if (unitDiff > 0) status = STATUS.HIGH;               // 🔺 زيادة في السعر (لصالح الشركة)
     else status = STATUS.LOW;                                  // 🔻 سعر أقل من المعتمد (خسارة / انخفاض خطير)
 
-    return { item, listItem, status, listPrice, unitDiff, totalDiff, expectedTotal: qty * listPrice, invoiceTotal };
+    return { item, listItem, status, listPrice, unitDiff, totalDiff, expectedTotal: qty * listPrice, invoiceTotal, netUnit };
   }
 
   /** تحليل مصفوفة بنود دفعة واحدة */
@@ -81,7 +93,7 @@
     }
   };
 
-  global.Comparison = { STATUS, analyzeItem, analyzeBatch, summarize, statusLabel, statusText };
+  global.Comparison = { STATUS, analyzeItem, analyzeBatch, summarize, statusLabel, statusText, netUnitOf };
 
   /* ================= المقارنة الشاملة بين كل اللستات =================
      يقرأ الأصناف مباشرة من مخزن الذاكرة المركزي window.appLists (بالترتيب حسب
@@ -134,5 +146,5 @@
     return rows;
   }
 
-  global.Comparison = { STATUS, analyzeItem, analyzeBatch, summarize, statusLabel, statusText, compareAllLists };
+  global.Comparison = { STATUS, analyzeItem, analyzeBatch, summarize, statusLabel, statusText, compareAllLists, netUnitOf };
 })(window);

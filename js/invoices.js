@@ -30,6 +30,8 @@
       unit: String(it.unit || '').trim(),
       quantity: Number(it.quantity) || 0,
       unitPrice: Number(it.unitPrice) || 0,
+      discountValue: Number(it.discountValue) || 0,
+      discountPct: Number(it.discountPct) || 0,
     };
   }
 
