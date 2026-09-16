@@ -97,6 +97,9 @@ window.CONFIG = {
     { slug: 'Shaheen',   name: 'قائمة شاهين (Shaheen)',     gid: '',           tab: 'Shaheen',   color: 'rose',    icon: 'fa-bolt',         url: SHEET_PUBLISHED_BASE },
   ],
   LISTS_REFRESH_HOURS: 6, // إعادة جلب تلقائية عند الإقلاع إذا مضى هذا القدر من الساعات على آخر مزامنة
+  // إصدار بنية بيانات اللستات المخزنة — عند تغييره تُعاد مزامنة كل اللستات مرة واحدة
+  // (الإقلاع للتغلب على بيانات قديمة اندمجت فيها وحدات مختلفة في سطر واحد قبل إصلاح المطابقة بالوحدة)
+  LIST_DATA_VERSION: 2,
 
   /* --- خدمات ربط Google Sheets --- */
   SHEETS: {

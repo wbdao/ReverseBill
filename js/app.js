@@ -224,6 +224,9 @@
 
   function runAllListCompare() {
     // المقارنة الشاملة تقرأ مباشرة من مخزن الذاكرة المركزي window.appLists
+    cmpAreaShown = true;
+    const wa = $('#cmp-area');
+    if (wa) wa.classList.remove('hidden');
     cmpState.rows = Comparison.compareAllLists(global.appLists);
     renderAllListCompare();
     const el = $('#cmp-status');
@@ -231,6 +234,7 @@
   }
 
   function runAllListCompareSilent() {
+    if (!cmpAreaShown) return; // خفيف: لا تُحسب المقارنة في الخلفية إلا إذا فتح المستخدم قسمها
     if (!$('#cmp-body')) return;
     runAllListCompare();
   }
@@ -601,8 +605,27 @@
     } else { proceed(); }
   }
 
+  /* ─────────────────── العرض عند الطلب (تخفيف الموقع) ───────────────────
+     جداول اللستة والمقارنة الشاملة تُبنى فقط بعد ضغط المستخدم لزر «عرض...» */
+  let listAreaShown = false;
+  let cmpAreaShown = false;
+  const showListArea = () => {
+    listAreaShown = true;
+    const area = $('#list-table-area');
+    if (area) area.classList.remove('hidden');
+    renderListItems();
+  };
+  const showCmpArea = () => {
+    cmpAreaShown = true;
+    const area = $('#cmp-area');
+    if (area) area.classList.remove('hidden');
+    if (cmpState.rows.length) renderAllListCompare();
+    else runAllListCompare();
+  };
+
   /* ─────────────────── قوائم الأسعار: الواجهة (+ ترقيم للكبير) ─────────────────── */
   function renderListItems() {
+    if (!listAreaShown) return; // لا يُبنى الجدول في الخلفية — يُعرض عند الطلب
     const l = Lists.active();
     const q = State.productFilter.trim().toLocaleLowerCase('ar-EG');
     const all = l ? l.items : [];
@@ -1312,6 +1335,10 @@
     });
     $('#btn-refresh-all-lists').addEventListener('click', refreshAllCloudLists);
 
+    // جداول اللستة والمقارنة تُعرض عند الطلب (تخفيف الموقع)
+    $('#btn-show-list').addEventListener('click', showListArea);
+    $('#btn-show-cmp').addEventListener('click', showCmpArea);
+
     // لستة النشطة (جدول قراءة فقط) + نسخ
     $('#btn-copy-list-tsv').addEventListener('click', () => {
       if (!Lists.active() || !Lists.active().items.length) { toast('اللستة فارغة', 'error'); return; }
@@ -1427,7 +1454,6 @@
     renderQuickList();
     renderCloudLists();
     renderDatalist();
-    renderListItems();
     renderInvoiceItems();
     renderHistory();
     bindEvents();

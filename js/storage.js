@@ -33,9 +33,9 @@
     /* --- قوائم الأسعار --- */
     getPriceLists: () => {
       const d = load(KEYS.PRICE_LISTS, {});
-      return { lists: Array.isArray(d.lists) ? d.lists : [], activeId: d.activeId || null };
+      return { lists: Array.isArray(d.lists) ? d.lists : [], activeId: d.activeId || null, version: Number(d.version) || 0 };
     },
-    savePriceLists: (lists, activeId) => save(KEYS.PRICE_LISTS, { lists, activeId }),
+    savePriceLists: (lists, activeId) => save(KEYS.PRICE_LISTS, { lists, activeId, version: (global.CONFIG.LIST_DATA_VERSION || 1) }),
 
     /* --- (ترحيل) النسخة القديمة أحادية اللستة --- */
     getLegacyProducts: () => load(KEYS.LEGACY_PRODUCTS, null),

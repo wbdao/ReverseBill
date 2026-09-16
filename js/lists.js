@@ -3,7 +3,7 @@
    • إدارة لستات مستقلة (إنشاء/تسمية/حذف/تفعيل/استيراد/تصدير)
    • فهرس Map مدمج للبحث السريع (O(1) تقريباً) — يدعم عشرات آلاف الأصناف
      index = { byCode: Map, byName: Map, codeUnit: Map, nameUnit: Map }
-   • المطابقة الدقيقة: رقم الصنف+الوحدة أولاً ثم الاسم+الوحدة
+   • المطابقة: رقم الصنف+الوحدة أولاً ثم الاسم+الوحدة — لا يُخلط سعر وحدة بغيرها
    • مخزن ذاكرة مركزي window.appLists = { [slug]: items[] } — مصدر الأصناف
      في الذاكرة فور الجلب (يتمزامن تلقائياً مع كل تغيير عبر persist) وتقرأ منه
      دوال البحث/السعر/المقارنة في app.js دون أي قراءة متكررة من localStorage
@@ -95,6 +95,9 @@
   /**
    * المطابقة الدقيقة ضمن لستة (كائن لستة أو مصفوفة items).
    * الأولوية: رقم الصنف+الوحدة → الاسم+الوحدة → رقم الصنف → الاسم.
+   * عند إعطاء وحدة ولم يوجد تطابق دقيق بها: لا يُستعمل سعر وحدة أخرى أبداً —
+   * إدخال بوحدة مسجلة تختلف عن الوحدة المعطاة يُعتبر غير مسجل، مع السماح بالرجوع
+   * لأي إدخال بلا وحدة مسجلة (لا تعدد أسعار حينها فلا تعارض).
    */
   function matchInList(list, itemNumber, name, unit) {
     const D = dataOf(list);
@@ -106,14 +109,30 @@
     if (D.idx) {
       // == المسار السريع (فهرس Map) — مناسب للبيانات الضخمة ==
       if (nc) {
-        let arr = D.idx.byCode.get(nc);
-        if (nu && arr && arr.length) {
-          const byU = arr.filter((it) => normalizeUnit(it.unit) === nu);
-          if (byU.length) return byU[0];
-          return arr[0]; // رقم مطابق لكن الوحدة مختلفة: نفضّل إرجاع الصنف بدل اعتباره غير مسجل
+        const arr = D.idx.byCode.get(nc);
+        if (arr && arr.length) {
+          if (nu) {
+            const byU = arr.filter((it) => normalizeUnit(it.unit) === nu);
+            if (byU.length) return byU[0];
+            const noUnit = arr.filter((it) => !normalizeUnit(it.unit));
+            if (noUnit.length) return noUnit[0]; // إدخال بلا وحدة: لا تعارض في الأسعار
+            return null; // الكود موجود لكن بوحدات مختلفة — لا نستخدم سعر وحدة أخرى
+          }
+          return arr[0]; // لا وحدة معطاة في البند: نطابق بالكود فقط
         }
-        if (arr && arr.length) return arr[0];
-        if (nm) { const nmArr = D.idx.byName.get(nm); if (nmArr && nmArr.length) return nmArr[0]; }
+        if (nm) {
+          const nmArr = D.idx.byName.get(nm);
+          if (nmArr && nmArr.length) {
+            if (nu) {
+              const byU = nmArr.filter((it) => normalizeUnit(it.unit) === nu);
+              if (byU.length) return byU[0];
+              const noUnit = nmArr.filter((it) => !normalizeUnit(it.unit));
+              if (noUnit.length) return noUnit[0];
+              return null;
+            }
+            return nmArr[0];
+          }
+        }
         return null;
       }
       if (nm) {
@@ -121,7 +140,11 @@
           const nHit = D.idx.nameUnit.get(nm + '\u0000' + nu);
           if (nHit) return nHit;
           const nmArr = D.idx.byName.get(nm);
-          if (nmArr && nmArr.length) return nmArr[0];
+          if (nmArr && nmArr.length) {
+            const noUnit = nmArr.filter((it) => !normalizeUnit(it.unit));
+            if (noUnit.length) return noUnit[0];
+            return null;
+          }
           return null;
         }
         const arr = D.idx.byName.get(nm);
@@ -136,14 +159,26 @@
     if (nc) {
       const byNum = items.filter((it) => normalizeNum(it.itemNumber) === nc);
       if (byNum.length) {
-        if (nu) { const byU = byNum.filter((it) => normalizeUnit(it.unit) === nu); if (byU.length) return byU[0]; }
+        if (nu) {
+          const byU = byNum.filter((it) => normalizeUnit(it.unit) === nu);
+          if (byU.length) return byU[0];
+          const noUnit = byNum.filter((it) => !normalizeUnit(it.unit));
+          if (noUnit.length) return noUnit[0];
+          return null;
+        }
         return byNum[0];
       }
     }
     if (nm) {
       const byName = items.filter((it) => normalizeName(it.name) === nm);
       if (byName.length) {
-        if (nu) { const byU = byName.filter((it) => normalizeUnit(it.unit) === nu); if (byU.length) return byU[0]; }
+        if (nu) {
+          const byU = byName.filter((it) => normalizeUnit(it.unit) === nu);
+          if (byU.length) return byU[0];
+          const noUnit = byName.filter((it) => !normalizeUnit(it.unit));
+          if (noUnit.length) return noUnit[0];
+          return null;
+        }
         return byName[0];
       }
     }
@@ -155,6 +190,13 @@
     const data = Storage.getPriceLists();
     lists = data.lists;
     activeId = data.activeId;
+
+    // بادرة إصدار: عند تغيّر بنية البيانات المخزنة (اندماج وحدات قديم مثلاً) تُجبر
+    // كل اللستات على إعادة المزامنة من المصدر مرة واحدة — تُحدَّث القيمة في persist التالي.
+    const expectVer = global.CONFIG.LIST_DATA_VERSION || 1;
+    if (!lists.length || data.version !== expectVer) {
+      for (const l of lists) { l.syncedAt = null; }
+    }
 
     if (!lists.length) {
       const legacy = Storage.getLegacyProducts();
@@ -334,10 +376,28 @@
       if (idx.codeUnit.has(key)) return idx.codeUnit.get(key);
       const arr = idx.byCode.get(nc);
       if (arr && arr.length) {
-        if (nu) { const byU = arr.filter((it) => normalizeUnit(it.unit) === nu); if (byU.length) return byU[0]; }
+        if (nu) {
+          const byU = arr.filter((it) => normalizeUnit(it.unit) === nu);
+          if (byU.length) return byU[0];
+          const noUnit = arr.filter((it) => !normalizeUnit(it.unit));
+          if (noUnit.length) return noUnit[0];
+          return null; // الكود موجود بوحدة مختلفة — تُحفظ الوحدة كبند مستقل بسعره
+        }
         return arr[0];
       }
-      if (nm) { const nArr = idx.byName.get(nm); if (nArr && nArr.length) return nArr[0]; }
+      if (nm) {
+        const nArr = idx.byName.get(nm);
+        if (nArr && nArr.length) {
+          if (nu) {
+            const byU = nArr.filter((it) => normalizeUnit(it.unit) === nu);
+            if (byU.length) return byU[0];
+            const noUnit = nArr.filter((it) => !normalizeUnit(it.unit));
+            if (noUnit.length) return noUnit[0];
+            return null;
+          }
+          return nArr[0];
+        }
+      }
       return null;
     }
     if (nm) {
@@ -345,7 +405,13 @@
       if (idx.nameUnit.has(key)) return idx.nameUnit.get(key);
       const arr = idx.byName.get(nm);
       if (arr && arr.length) {
-        if (nu) { const byU = arr.filter((it) => normalizeUnit(it.unit) === nu); if (byU.length) return byU[0]; }
+        if (nu) {
+          const byU = arr.filter((it) => normalizeUnit(it.unit) === nu);
+          if (byU.length) return byU[0];
+          const noUnit = arr.filter((it) => !normalizeUnit(it.unit));
+          if (noUnit.length) return noUnit[0];
+          return null;
+        }
         return arr[0];
       }
       return null;
