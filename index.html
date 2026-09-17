@@ -4,6 +4,7 @@
      مراجع الفواتير — نظام متكامل لمقارنة الفواتير والأسعار (SPA)
      ═══════════════════════════════════════════════════════════════════════
      • بنية معيارية (Modules):
+         js/auth.js        → بوابة تسجيل الدخول + صلاحيات الوصول للستات (Security)
          js/config.js      → الإعدادات المركزية (مفاتيح/هينتس/نماذج/روابط)
          js/utils.js       → أدوات عامة (أرقام/تطبيع/حافظة/تنبيهات)
          js/storage.js     → LocalStorage لكل كيان بمفتاح مستقل (Services)
@@ -47,6 +48,56 @@
 
 <body class="bg-slate-100 min-h-screen text-slate-800">
 
+  <!-- ═══════════════════════ بوابة تسجيل الدخول ═══════════════════════
+       تُعرض أولاً قبل التطبيق؛ لا يظهر التطبيق إلا بعد تسجيل دخول ناجح.
+       الحسابات والصلاحيات مضبوطة في js/auth.js. -->
+  <div id="login-gate" class="auth-gate">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="w-14 h-14 rounded-2xl bg-indigo-600 text-white grid place-items-center text-2xl shadow-lg shadow-indigo-300/50"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+        <h1 class="auth-title">مراجع الفواتير</h1>
+        <p class="auth-subtitle">مراجعة الفواتير ومقارنة الأسعار مع اللستات المعتمدة</p>
+      </div>
+
+      <div class="auth-panel">
+        <h2 class="text-lg font-extrabold text-slate-800 mb-5 flex items-center gap-2"><i class="fa-solid fa-lock text-indigo-600"></i> تسجيل الدخول</h2>
+        <form id="login-form" class="space-y-4" autocomplete="off">
+          <div class="field">
+            <label for="login-username"><i class="fa-solid fa-user me-1"></i>اسم المستخدم</label>
+            <select id="login-username" class="input">
+              <option value="BranchAccount">BranchAccount (حساب الفرع)</option>
+              <option value="MainAccount">MainAccount (الحساب الرئيسي)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="login-password"><i class="fa-solid fa-key me-1"></i>كلمة المرور</label>
+            <div class="relative">
+              <input type="password" id="login-password" class="input !pe-10" placeholder="••••••••" />
+              <button type="button" id="btn-toggle-pass" class="absolute inset-y-0 end-1 w-9 grid place-items-center text-slate-400 hover:text-indigo-600" title="إظهار/إخفاء كلمة المرور" aria-label="إظهار/إخفاء كلمة المرور"><i class="fa-solid fa-eye"></i></button>
+            </div>
+          </div>
+          <p id="login-error" class="hidden text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2"><i class="fa-solid fa-circle-exclamation me-1"></i><span id="login-error-text"></span></p>
+          <button type="submit" class="btn btn-primary w-full !py-3 text-base"><i class="fa-solid fa-right-to-bracket"></i> دخول</button>
+        </form>
+
+        <button type="button" id="btn-toggle-hint" class="w-full mt-4 text-[11px] font-bold text-slate-400 hover:text-indigo-600 inline-flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-circle-question"></i> بيانات الدخول التجريبية
+        </button>
+        <div id="login-hint" class="hidden mt-3 rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 p-3 text-[11px] text-slate-600 space-y-2 leading-6">
+          <p class="font-extrabold text-indigo-700"><i class="fa-solid fa-truck-fast me-1"></i> BranchAccount — الستات: AgentDist · Company · online</p>
+          <p class="font-mono dir-ltr text-center bg-white rounded-lg py-1.5 border border-slate-200">كلمة المرور: <b class="text-slate-800">Branch@2026</b></p>
+          <p class="font-extrabold text-indigo-700"><i class="fa-solid fa-building me-1"></i> MainAccount — جميع الستات (All)</p>
+          <p class="font-mono dir-ltr text-center bg-white rounded-lg py-1.5 border border-slate-200">كلمة المرور: <b class="text-slate-800">Main@2026</b></p>
+        </div>
+      </div>
+
+      <p class="auth-foot">للأغراض الداخلية فقط — جميع البيانات محفوظة محلياً في المتصفح</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════ التطبيق (مخفٍ حتى تسجيل الدخول) ═══════════════════════ -->
+  <div id="app-shell" class="hidden">
+
   <!-- ══════ الشريط العلوي ══════ -->
   <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200 shadow-sm">
     <div class="w-full px-4">
@@ -64,6 +115,10 @@
           <button data-tab="history" class="tab-btn"><i class="fa-solid fa-clock-rotate-left me-1.5"></i>سجل الفواتير</button>
           <button data-tab="data" class="tab-btn"><i class="fa-solid fa-cloud me-1.5"></i>البيانات والسحابة</button>
         </nav>
+        <div id="session-area" class="hidden flex items-center gap-2">
+          <span id="user-chip" class="hidden items-center gap-1.5 text-xs font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1.5 whitespace-nowrap"></span>
+          <button id="btn-logout" class="hidden btn btn-ghost text-xs px-3 py-1.5"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
+        </div>
       </div>
     </div>
   </header>
@@ -427,6 +482,8 @@
     جميع البيانات محفوظة محلياً في متصفحك (LocalStorage) — لا يتم رفع أو تحميل أي ملفات
   </footer>
 
+  </div><!-- /app-shell -->
+
   <!-- حاوية التنبيهات -->
   <div id="toast-wrap" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 space-y-2 w-[min(92vw,420px)]"></div>
 
@@ -434,8 +491,9 @@
   <div id="modal-root"></div>
 
   <!-- ═══════════════════════════════════════════════════════════════════
-       وحدات التطبيق — تُحمَّل بالترتيب (الخدمات ← الدولة ← الواجهة)
+       وحدات التطبيق — تُحمَّل بالترتيب (الأمان ← الخدمات ← الدولة ← الواجهة)
        ═══════════════════════════════════════════════════════════════════ -->
+  <script src="js/auth.js"></script>
   <script src="js/config.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/storage.js"></script>

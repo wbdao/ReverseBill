@@ -1432,7 +1432,18 @@
     $('#cloud-next').addEventListener('click', () => { cloudComparePage++; renderCloudCompare(); });
   }
 
-  /* ─────────────────── الإقلاع ─────────────────── */
+  /* ─────────────────── الإقلاع ───────────────────
+     لا يُقلَع التطبيق فعلياً إلا بعد نجاح تسجيل الدخول:
+     • عند حمل الصفحة بجلسة صالحة يُقلَع فوراً بعد فتح بوابة الدخول (auth.js أولاً).
+     • عند تسجيل الدخول الآن تُطلق auth.js حدث 'bills:auth-ok' ثم يتقلع هنا.
+     • الستات المبنية والمقارنة والبطاقات محكومة بـ CONFIG.LISTS بعد فلترة الدور. */
+  let booted = false;
+  function boot() {
+    if (booted) return;
+    booted = true;
+    init();
+  }
+
   function init() {
     Lists.init();
     Invoices.init();
@@ -1461,10 +1472,15 @@
     autoFetchCloudLists(); // جلب تلقائي للست الناقص/القديم (خلفية، لا يمنع العمل)
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', () => {
+    // لا يُقلع التطبيق قبل جلسة صالحة — يُبقى مغلقاً خلف بوابة الدخول
+    if (!global.Auth || global.Auth.isAuthenticated()) boot();
+  });
+  document.addEventListener('bills:auth-ok', boot);
 
   global.App = {
   switchTab, renderHistory, updateAllRowsAndSummary, reportToTSV, invoicesToTSV,
   printInvoiceReport, buildPrintDocumentHTML, buildPrintTotalsHTML, printRowHTML,
+  boot,
 };
 })(window);

@@ -124,3 +124,52 @@ tbody tr { animation: fadeSlide .2s ease-out; }
 #items-table-body tr:hover { background: #eef2ff; }
 #items-table-wrap th, #items-table-wrap td { vertical-align: middle; white-space: nowrap; }
 #items-table-body .cell-input { min-width: 0; }
+
+/* ═══════════════════════ بوابة تسجيل الدخول ═══════════════════════ */
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  overflow-y: auto;
+  background:
+    radial-gradient(1200px 600px at 85% -10%, rgba(99, 102, 241, 0.35), transparent 60%),
+    radial-gradient(900px 500px at 0% 110%, rgba(52, 211, 153, 0.28), transparent 55%),
+    linear-gradient(160deg, #eef2ff 0%, #f8fafc 45%, #ecfdf5 100%);
+}
+.auth-gate.hidden { display: none; }
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  animation: fadeSlide .35s ease-out;
+}
+
+.auth-brand {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+}
+.auth-title { font-size: 1.5rem; font-weight: 900; color: #1e293b; margin: 0; }
+.auth-subtitle { font-size: 0.8rem; font-weight: 600; color: #64748b; margin: 0; }
+
+.auth-panel {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.25rem;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.14);
+  padding: 1.5rem;
+}
+
+.auth-foot { font-size: 0.7rem; font-weight: 600; color: #94a3b8; margin: 0; }
+
+#btn-logout:hover { background: #fee2e2; color: #be123c; }

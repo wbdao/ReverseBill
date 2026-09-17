@@ -1,44 +1,165 @@
-# ReverseBill (مراجع الفواتير)
+# مراجع الفواتير — ReverseBill 🧾
 
-Desktop web app for reviewing supplier invoices against approved price lists pulled from a single published Google Sheets document (one tab per list).
+> نظام متكامل لمراجعة فواتير الموردين ومقارنة أسعار البيع مع اللستات المعتمدة السحابية، يعمل بالكامل داخل المتصفح ولا يحتاج سيرفراً.
 
-## Features
+![JS](https://img.shields.io/badge/JavaScript-vanilla-4f46e5)
+![CSS](https://img.shields.io/badge/CSS-Tailwind%20CDN-38bdf8)
+![Build](https://img.shields.io/badge/build-none-22c55e)
+![Storage](https://img.shields.io/badge/storage-localStorage-94a3b8)
+![License](https://img.shields.io/badge/license-MIT-64748b)
 
-- Load price lists from a published Google Sheets file via CSV (5 lists: AgentDist, Company, online, Retail, Shaheen) with automatic gid discovery
-- In-memory list store (`window.appLists`) with fast indexed lookup
-- Invoice paste from clipboard or Excel import, automatic price matching against the selected list
-- Variance analysis per line item (unit diff, total diff, status badges: match / high / save / unknown)
-- Print report with repeatable table header, summary cards, and signature blocks
-- Local-only storage (no server required, all data stays in browser localStorage)
+تطبيق **صفحة واحدة (SPA)** مبني بلغة JavaScript خام بدون أي خطوة بناء أو إطارات عمل. يمكن تشغيله مباشرة من القرص (`file://`) أو عبر أي استضافة ثابتة.
 
-## Tech Stack
+---
 
-- Vanilla HTML / CSS / JavaScript (no build step, no framework)
-- Tailwind CSS via CDN
-- Google Fonts (Tajawal)
-- Font Awesome icons via CDN
-- Sheets.js wrapper for Google Sheets CSV API
+## 🔐 تسجيل الدخول والصلاحيات
 
-## Setup
+قبل الوصول إلى التطبيق تظهر **بوابة تسجيل دخول** تحمي النظام، ويحتوي النظام على **حسابين بصلاحيات وصول محددة للستات**:
 
-1. Open `index.html` in any modern browser — no server required.
-2. Paste a published Google Sheets URL (or use the default included in `config.js`).
-3. Match list tabs to app list slugs via the Data / Cloud tab.
+| الحساب | نوع الوصول | الستات المتاحة | كلمة المرور |
+|----------------|----------------------|-------------------------------------------|----------------|
+| `BranchAccount` | فرعي (محدود) | `AgentDist` · `Company` · `online` | `Branch@2026` |
+| `MainAccount`  | رئيسي (كامل) | جميع الستات (All) | `Main@2026` |
 
-## Project Structure
+### مصفوفة الصلاحيات
+
+| الستة | BranchAccount | MainAccount |
+|------------------|:-------------:|:-----------:|
+| قائمة الموزع (AgentDist) | ✅ | ✅ |
+| قائمة الشركة (Company) | ✅ | ✅ |
+| قائمة أونلاين (online) | ✅ | ✅ |
+| قائمة الريتيل (Retail) | ❌ | ✅ |
+| قائمة شاهين (Shaheen) | ❌ | ✅ |
+
+### كيف تُطبَّق الصلاحية
+
+- الحسابات وكلمات المرور مضبوطة في `js/auth.js` — كلمات المرور مخزّنة **كقيم SHA-256** (مع ملح ثابت) وليست نصاً صريحاً.
+- بعد تسجيل دخول ناجح يُفلتَر `CONFIG.LISTS` حسب الدور **قبل إقلاع التطبيق**، فتظهر بطاقات اللستات وقوائم الأسماء والمقارنة ضمن الستات المخوّل بها فقط.
+- الجلسة محفوظة محلياً (localStorage)؛ زر **«خروج»** في الشريط العلوي يمسح الجلسة ويعيد تحميل الصفحة إلى بوابة الدخول.
+- عند تبديل الحساب تُعاد مزامنة اللستات السحابية تلقائياً من المصدر.
+
+> ⚠️ **ملاحظة أمنية:** الحماية مخصصة لتطبيق داخلي يعمل على أجهزة موثوقة. أي منطق يعمل في المتصفح يمكن قراءته مطوِّراً بواسطة طرف يعرف الجافاسكريبت، فلا يُعتمد عليه لبيانات حسّاسة حكومية أو مالية عالية الدقة.
+
+---
+
+## ✨ المزايا
+
+- **بوابة دخول** قبل فتح التطبيق مع حسابين بصلاحيات وصول موزّعة على الستات.
+- **جلب الستات من Google Sheets** منشوراً عبر CSV (5 تبويبات في مستند واحد) مع كشف تلقائي لـ `gid`.
+- **مقارنة ذكية** لكل بند فاتورة مقابل اللستة النشطة: مطابقة بـ «رقم الصنف + الوحدة» ثم «الاسم + الوحدة» عبر فهرس `Map` سريع.
+- **تحليل فروقات** لكل بند: فرق الوحدة، إجمالي الفرق، وشارات مراجعة (🟢 مطابق / 🔺 زيادة / 🔻 انخفاض خطير / ⚠️ غير مسجل).
+- **لصق سريع** من Excel/السيستم (Ctrl+V) مع كشف رؤوس الأعمدة تلقائياً (عربي/إنجليزي).
+- **استيراد Excel** محلياً عبر مكتبة SheetJS (تُحمَّل من CDN عند الحاجة فقط).
+- **لوحة ملخص مالي** (إجمالي الفاتورة، المعتمد، الزيادات، الانخفاضات، الصافي، الانحراف %).
+- **سجل فواتير** محفوظ محلياً مع تصدير/استيراد JSON ونسخ كجدول ومسح.
+- **تقرير طباعة** معزول كلياً بتنسيق أسود/أبيض صريح (ترويسة متكررة + تواقيع).
+- **مقارنة سحابية** (موزع ضد شركة) من شيت منشور، مع تجاوز إلزامية الوحدة وفلاتر العرض.
+- **مقارنة شاملة** بين كل الستات بتلوين الأقل/الأعلى سعراً وفلتر «المتفاوت فقط».
+- **أداء عالٍ**: ترقيم لجدول اللستة، بناء الجداول عند الطلب، إدخال ضخم على أجزاء (`requestIdleCallback`).
+- **تخزين محلي فقط** — كل البيانات في متصفحك، لا يوجد رفع أو تحميل لأي ملف.
+
+---
+
+## 🛠 التقنيات
+
+| التقنية | الاستخدام |
+|---|---|
+| HTML5 / CSS3 / JavaScript (خام) | الأساس كاملاً — بدون إطار عمل أو خطوة بناء |
+| Tailwind CSS (CDN) | التنسيقات والتخطيط |
+| Google Fonts (Tajawal) | الخط العربي |
+| Font Awesome (CDN) | الأيقونات |
+| Google Sheets CSV Export / Gviz | جلب اللستات السحابية بدون مفاتيح |
+| SheetJS (CDN، عند الطلب) | قراءة وتصدير ملفات Excel |
+| Web Crypto / SHA-256 (مدمج) | تخزين كلمات المرور كقيم هاش |
+
+---
+
+## 📁 بنية المشروع
 
 ```
-css/style.css          – App styles + print media rules
-js/config.js           – Configuration constants
-js/utils.js            – Normalization and formatting helpers
-js/storage.js          – localStorage persistence
-js/sheets.js           – Google Sheets published CSV fetcher
-js/parser.js           – Clipboard / TSV / CSV row parser
-js/lists.js            – Price list CRUD, in-memory store, indexed matching
-js/comparison.js       – Variance analysis and aggregation
-js/invoices.js         – Invoice CRUD, draft persistence, upsert save
-js/state.js            – Central state and pub/sub bus
-js/app.js              – UI rendering and event binding
-js/excel.js            – Excel export (SheetJS)
-index.html             – Single-page app shell
+bills/
+├── index.html              هيكل التطبيق + بوابة الدخول + تحميل الوحدات
+├── css/
+│   └── style.css           أنماط مخصصة فوق Tailwind + أنماط بوابة الدخول والطباعة
+├── js/
+│   ├── auth.js             بوابة الدخول، الجلسة، وصلاحيات الوصول للستات (Security)
+│   ├── config.js           الإعدادات المركزية: مفاتيح، هينتس، نماذج، روابط الستات
+│   ├── utils.js            أدوات عامة: أرقام/تطبيع/حافظة/تنبيهات/تأكيدات
+│   ├── storage.js          localStorage لكل كيان بمفتاح مستقل
+│   ├── parser.js           تحليل TSV/CSV وكشف الأعمدة
+│   ├── sheets.js           الرابط السحابي Google Sheets (CSV/Gviz/API)
+│   ├── excel.js            ملفات Excel المحلية + التصدير (SheetJS)
+│   ├── lists.js            قوائم الأسعار + فهرس Map للبحث السريع
+│   ├── invoices.js         سجل الفواتير والمسودة
+│   ├── comparison.js       محرك المقارنة وتحليل الفروقات
+│   ├── state.js            الحالة المركزية + اشتراكات (pub/sub)
+│   └── app.js              الواجهة والأحداث والإقلاع (UI)
+└── README.md               هذه الوثيقة
 ```
+
+**ترتيب التحميل:** `auth.js ← config.js ← utils.js ← storage.js ← parser.js ← sheets.js ← excel.js ← lists.js ← invoices.js ← comparison.js ← state.js ← app.js`
+
+---
+
+## 🚀 التشغيل
+
+1. افتح `index.html` في أي متصفح حديث — **لا يحتاج سيرفراً** (يعمل من `file://`).
+2. سجّل الدخول بأحد الحسابين (راجع جدول الحسابات أعلاه).
+3. ستُجلب اللستات السحابية تلقائياً عند أول تشغيل (أو استخدم زر «تحديث الكل» في تبويب **قوائم الأسعار**).
+4. في تبويب **الفاتورة** الصق الجدول من Excel/السيستم بـ Ctrl+V أو ارفع ملف Excel، أو أضف البنود يدوياً — وتظهر مقارنة الأسعار والشكاوى فورياً.
+
+### تهيئة اللستات السحابية
+
+الروابط والتبويبات تُضبط في `js/config.js` ضمن `CONFIG.LISTS` (مستند Google Sheets منشور بالعرض العام، تبويب لكل لستة):
+
+```js
+LISTS: [
+  { slug: 'AgentDist', name: 'قائمة الموزع (AgentDist)', gid: '…', tab: 'AgentDist', … },
+  { slug: 'Company',   name: 'قائمة الشركة (Company)',   gid: '',  tab: 'Company',   … },
+  { slug: 'online',    name: 'قائمة أونلاين (online)',    gid: '',  tab: 'online',    … },
+  { slug: 'Retail',    name: 'قائمة الريتيل (Retail)',    gid: '',  tab: 'Retail',    … },
+  { slug: 'Shaheen',   name: 'قائمة شاهين (Shaheen)',     gid: '',  tab: 'Shaheen',   … },
+]
+```
+
+- `gid` فارغ = كشف تلقائي لمعرّف التبويب من قائمة التبويبات المنشورة حسب `tab`.
+- تغيير الحساب (مثلاً من فرع إلى رئيسي) يعيد بناء كل اللستات من المصدر تلقائياً.
+
+---
+
+## 🔒 ملاحظات أمنية وتخزين
+
+- كلمات المرور تُخزَّن كقيم **SHA-256** مع ملح ثابت في `js/auth.js` — يمكنك تغييرها بتحديث الحساب ثم استبدال الهاش.
+- الجلسة والفاتورة الحالية والستات والسجل كلها في **localStorage** الخاص بالمتصفح لكل جهاز.
+- لا يُرفع أي ملف إلى إنترنت، والمساحة المحلية تحتمل قوائم ضخمة (تجنّب فقط ملء التخزين).
+- البيانات الحساسة مستقلة عن البيانات المطبوعة: التقرير يُبنى في نافذة طباعة معزولة بنمط أبيض/أسود صريح.
+
+---
+
+## 🧰 تعديل الحسابات (سريع)
+
+في `js/auth.js`:
+
+```js
+const ACCOUNTS = {
+  BranchAccount: {
+    label: 'حساب الفرع',
+    desc: 'الوصول للستات: الموزع · الشركة · أونلاين',
+    access: ['AgentDist', 'Company', 'online'],   // أو  'all'  للوصول الكامل
+    passHash: '90043cc3…',                        // sha256('invoicereviewer::' + password)
+  },
+  MainAccount: { … access: 'all', passHash: '57e27ca8…' },
+};
+```
+
+لإنشاء هاش لكلمة مرور جديدة يمكن حساب:
+
+```bash
+echo -n "invoicereviewer::كلمة-المرور" | sha256sum
+```
+
+---
+
+## 📄 الرخصة
+
+MIT — استخدم وعدّل بحرية.
