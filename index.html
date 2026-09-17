@@ -113,7 +113,6 @@
           <button data-tab="invoice" class="tab-btn"><i class="fa-solid fa-receipt me-1.5"></i>الفاتورة</button>
           <button data-tab="listmanager" class="tab-btn"><i class="fa-solid fa-list me-1.5"></i>قوائم الأسعار</button>
           <button data-tab="history" class="tab-btn"><i class="fa-solid fa-clock-rotate-left me-1.5"></i>سجل الفواتير</button>
-          <button data-tab="data" class="tab-btn"><i class="fa-solid fa-cloud me-1.5"></i>البيانات والسحابة</button>
         </nav>
         <div id="session-area" class="hidden flex items-center gap-2">
           <span id="user-chip" class="hidden items-center gap-1.5 text-xs font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1.5 whitespace-nowrap"></span>
@@ -353,127 +352,6 @@
       <div id="empty-history" class="card text-center py-12 text-slate-400 hidden">
         <p class="text-4xl mb-2"><i class="fa-regular fa-folder-open"></i></p>
         <p>لا توجد فواتير محفوظة حتى الآن.</p>
-      </div>
-    </section>
-
-    <!-- ════════════════ عرض: البيانات والسحابة ════════════════ -->
-    <section id="view-data" data-view class="space-y-6 hidden">
-
-      <!-- ⭐ المقارنة السحابية: موزع ضد شركة -->
-      <div class="card border-dashed border-indigo-300 bg-indigo-50/40">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <h2 class="section-title"><i class="fa-solid fa-scale-balanced text-indigo-600 me-1.5"></i>المقارنة السحابية — موزع ضد شركة</h2>
-          <span class="text-xs text-slate-500">شيت منشور بتبويبين: لستة الموزع ولستة الشركة</span>
-        </div>
-        <p class="text-xs text-slate-600 mb-3">
-          الصق رابط الشيت المنشور (<code class="bg-slate-100 px-1 py-0.5 rounded">pubhtml</code>) وسيُجلب تبويبا
-          <b>الموزع</b> و<b>الشركة</b> مباشرة عبر <b>رابط CSV منشور</b> بدون مفتاح، ثم تُقارَن الأسعار تبويباً بتبويب
-          (مطابقة بالكود والاسم مع تطابق الوحدة إلزامي — قابل للتجاوز بالخانة أدناه).
-        </p>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div class="field md:col-span-2">
-            <label for="cloud-url">رابط الشيت المنشور</label>
-            <input type="text" id="cloud-url" class="input dir-ltr" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/e/…/pubhtml" />
-          </div>
-          <div class="field">
-            <label for="cloud-sheet-agent">قائمة الموزع (المراد فحصها)</label>
-            <select id="cloud-sheet-agent" class="input"></select>
-          </div>
-          <div class="field">
-            <label for="cloud-sheet-ref">قائمة الشركة (المرجع)</label>
-            <select id="cloud-sheet-ref" class="input"></select>
-          </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-3 mt-3">
-          <button id="btn-cloud-fetch" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-down"></i> جلب التبويبتين</button>
-          <button id="btn-cloud-run-compare" class="btn btn-success" disabled><i class="fa-solid fa-scale-balanced"></i> تشغيل المقارنة</button>
-          <button id="btn-cloud-copy" class="btn btn-ghost" disabled title="نسخ جدول المقارنة كاملاً للصقه في Excel"><i class="fa-solid fa-table"></i> نسخ كجدول</button>
-          <button id="btn-cloud-export-xlsx" class="btn btn-ghost" disabled title="تنزيل تقرير المقارنة Excel"><i class="fa-solid fa-file-excel text-green-600"></i> تنزيل Excel</button>
-          <div class="field grow ms-auto"><label for="gs-api-key">مفتاح Google Sheets API (اختياري — للأجهزة المقيدة)</label><input type="password" id="gs-api-key" class="input dir-ltr" autocomplete="off" placeholder="AIza…" /></div>
-        </div>
-        <div class="flex flex-wrap items-center gap-5 mt-3 text-xs font-bold text-slate-600">
-          <label class="inline-flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="cloud-ignore-unit" class="accent-indigo-600 w-4 h-4" />
-            تجاهل تطابق الوحدة في المقارنة
-          </label>
-          <label class="inline-flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="cloud-diff-only" class="accent-indigo-600 w-4 h-4" />
-            إظهار غير المطابق فقط
-          </label>
-        </div>
-        <p id="cloud-status" class="text-xs font-bold text-slate-500 mt-3"></p>
-
-        <!-- معاينة التبويبتين بعد الجلب -->
-        <div id="cloud-result" class="hidden mt-4">
-          <div id="cloud-preview-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
-        </div>
-
-        <!-- تقرير المقارنة -->
-        <div id="cloud-compare-wrap" class="hidden mt-5 rounded-xl border border-indigo-200 bg-white overflow-hidden">
-          <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-indigo-50 border-b border-indigo-100">
-            <h3 class="font-extrabold text-slate-800 text-sm"><i class="fa-solid fa-chart-simple text-indigo-600 me-1.5"></i>تقرير المقارنة (الموزع مقابل الشركة)</h3>
-            <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-              <span>مطابق <b id="cloud-sum-match" class="text-emerald-600">0</b></span>
-              <span>زيادة <b id="cloud-sum-high" class="text-rose-600">0</b></span>
-              <span>انخفاض <b id="cloud-sum-save" class="text-amber-600">0</b></span>
-              <span>غير مسجل <b id="cloud-sum-unknown" class="text-amber-600">0</b></span>
-              <span class="font-extrabold text-slate-700">الإجمالي <b id="cloud-total">0</b></span>
-            </div>
-          </div>
-          <div class="overflow-x-auto max-h-[28rem]">
-            <table class="w-full min-w-[820px] text-sm">
-              <thead class="sticky top-0">
-                <tr class="text-slate-500 text-xs bg-white">
-                  <th class="text-right py-2 px-3">#</th>
-                  <th class="text-right py-2 px-3">رقم الصنف</th>
-                  <th class="text-right py-2 px-3">اسم المنتج</th>
-                  <th class="text-right py-2 px-3">الوحدة</th>
-                  <th class="text-right py-2 px-3">سعر الموزع</th>
-                  <th class="text-right py-2 px-3">سعر الشركة</th>
-                  <th class="text-right py-2 px-3">الفرق</th>
-                  <th class="text-right py-2 px-3">مؤشر المراجعة</th>
-                </tr>
-              </thead>
-              <tbody id="cloud-compare-body"></tbody>
-            </table>
-          </div>
-          <div class="flex flex-wrap items-center justify-center gap-2 py-3 border-t border-slate-100">
-            <button id="cloud-prev" class="btn btn-ghost text-xs px-3 py-1.5" disabled><i class="fa-solid fa-chevron-right"></i> السابق</button>
-            <span id="cloud-page-label" class="text-xs font-bold text-slate-500">1 / 1</span>
-            <button id="cloud-next" class="btn btn-ghost text-xs px-3 py-1.5" disabled>التالي <i class="fa-solid fa-chevron-left"></i></button>
-          </div>
-        </div>
-      </div>
-
-      <!-- استيراد Excel محلي (للفاتورة) -->
-      <div class="card">
-        <h2 class="section-title mb-2"><i class="fa-solid fa-file-excel text-green-600 me-1.5"></i>استيراد ملفات Excel المحلية</h2>
-        <p class="text-xs text-slate-600 mb-3">
-          ارفع ملف .xlsx/.xls أو .csv ليُحوَّل تلقائياً إلى مربع لصق الفاتورة داخل شاشة «الفاتورة» للمراجعة قبل الإدخال
-          (البنود تُقارن فوراً مع «اللستة السحابية» المختارة). مكتبة SheetJS تُحمّل من CDN عند أول استخدام فقط.
-        </p>
-        <div class="flex flex-wrap gap-2">
-          <button id="btn-xlsx-invoice-2" class="btn btn-ghost"><i class="fa-solid fa-receipt"></i> رفع Excel -> فاتورة</button>
-          <input type="file" id="xlsx-invoice-file-2" accept=".xlsx,.xls,.csv" class="hidden" />
-        </div>
-      </div>
-
-      <!-- الملاحظات المعمارية -->
-      <div class="card bg-slate-50/70">
-        <h2 class="section-title mb-2"><i class="fa-solid fa-cubes text-indigo-500 me-1.5"></i>بنية التطبيق (Modules)</h2>
-        <p class="text-xs text-slate-500 leading-6">
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/config.js</code> إعدادات ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/utils.js</code> أدوات ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/storage.js</code> تخزين ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/parser.js</code> تحليل ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/sheets.js</code> سحابة ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/excel.js</code> إكسل ·<br />
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/lists.js</code> اللستات (فهرس Map) ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/comparison.js</code> المقارنة ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/invoices.js</code> السجل ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/state.js</code> الحالة ·
-          <code class="bg-slate-100 px-1 py-0.5 rounded">js/app.js</code> الواجهة.
-        </p>
       </div>
     </section>
   </main>

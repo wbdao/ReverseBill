@@ -1036,225 +1036,6 @@
     frame.contentWindow.print();
   }
 
-  /* ─────────────────── مقارنة سحابية: موزع ضد شركة ─────────────────── */
-  const CLOUD = CONFIG.CLOUD_COMPARE;
-  let cloudTabs = null;        // { tabs: [{name,gid,rows,count}] } من fetchSheetsData
-  let cloudComparePage = 0;
-
-  const cloudLabel = (name) => (CLOUD.LABELS && CLOUD.LABELS[name]) || name;
-
-  function fillCloudTabSelects() {
-    const opts = (CLOUD.TABS || []).map((t) => `<option value="${esc(t)}">${esc(cloudLabel(t))}</option>`).join('');
-    const a = $('#cloud-sheet-agent'); if (a) a.innerHTML = opts;
-    const r = $('#cloud-sheet-ref'); if (r) r.innerHTML = opts;
-  }
-
-  function seedCloudPanel() {
-    const urlEl = $('#cloud-url');
-    if (urlEl && !urlEl.value) urlEl.value = CLOUD.DEFAULT_URL || '';
-    fillCloudTabSelects();
-    if (State.settings.cloudCompareUrl && urlEl) urlEl.value = State.settings.cloudCompareUrl;
-    const a = $('#cloud-sheet-agent'); if (a && State.settings.cloudAgentTab && a.value !== State.settings.cloudAgentTab) a.value = State.settings.cloudAgentTab;
-    const r = $('#cloud-sheet-ref'); if (r && State.settings.cloudRefTab && r.value !== State.settings.cloudRefTab) r.value = State.settings.cloudRefTab;
-  }
-
-  async function handleCloudFetch() {
-    const url = $('#cloud-url').value.trim();
-    if (!url) { toast('أدخل رابط الشيت المنشور أولاً', 'error'); $('#cloud-url').focus(); return; }
-    const apiKey = $('#gs-api-key').value.trim();
-    const agent = $('#cloud-sheet-agent').value;
-    const ref = $('#cloud-sheet-ref').value;
-    State.settings.cloudCompareUrl = url;
-    State.settings.cloudAgentTab = agent;
-    State.settings.cloudRefTab = ref;
-    Storage.saveSettings(State.settings);
-
-    const btn = $('#btn-cloud-fetch');
-    const orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جارٍ جلب التبويبتين...';
-    const statusEl = $('#cloud-status');
-    statusEl.textContent = 'جارٍ الاتصال بـ Google Sheets...';
-    statusEl.className = 'text-xs font-bold text-slate-500';
-    $('#cloud-result').classList.add('hidden');
-    $('#cloud-compare-wrap').classList.add('hidden');
-    $('#btn-cloud-run-compare').disabled = true;
-
-    try {
-      const data = await Sheets.fetchSheetsData(url, {
-        tabs: [agent, ref],
-        apiKey,
-        onTab: ({ tab, count, done, total }) => {
-          statusEl.textContent = `تم جلب «${cloudLabel(tab)}» (${count} صف) — ${done}/${total}`;
-        },
-      });
-      cloudTabs = data;
-      State.settings.lastSyncAt = new Date().toISOString();
-      Storage.saveSettings(State.settings);
-      statusEl.textContent = `✓ جُلب ${data.tabs.length} تبويب عبر ${data.source === 'api' ? 'Google Sheets API' : 'رابط CSV منشور'}`;
-      statusEl.className = 'text-xs font-bold text-emerald-600';
-      $('#cloud-result').classList.remove('hidden');
-      $('#btn-cloud-run-compare').disabled = false;
-      renderCloudPreview();
-      runCloudCompare();
-      $('#cloud-compare-wrap').classList.remove('hidden');
-      toast('تم جلب اللستتين من الشيت بنجاح');
-    } catch (err) {
-      cloudTabs = null;
-      State.cloudCompareRows = [];
-      State.cloudCompareStats = null;
-      statusEl.textContent = 'فشل الجلب — تحقق من الرابط أو جرب وضع API بمفتاح';
-      statusEl.className = 'text-xs font-bold text-rose-600';
-      toast(err && err.message ? err.message : 'فشل الاتصال بجداول Google', 'error');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = orig;
-    }
-  }
-
-  function renderCloudPreview() {
-    if (!cloudTabs || !$('#cloud-preview-grid')) return;
-    $('#cloud-preview-grid').innerHTML = cloudTabs.tabs.map((t) => {
-      const parsed = Parser.extractListRows(t.rows);
-      const sample = parsed.rows.slice(0, CLOUD.PREVIEW_ROWS || 8);
-      return `
-        <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
-          <div class="px-3 py-2 bg-slate-50 border-b font-extrabold text-sm text-slate-700 flex justify-between">
-            <span>${esc(cloudLabel(t.name))}</span>
-            <span class="text-xs font-bold text-slate-400">${t.count} صف · ${parsed.rows.length} بند</span>
-          </div>
-          <div class="overflow-x-auto max-h-64">
-            <table class="w-full text-xs">
-              <thead>
-                <tr class="bg-slate-100 text-slate-500">
-                  <th class="px-2 py-1 text-start">الكود</th><th class="px-2 py-1 text-start">الوحدة</th>
-                  <th class="px-2 py-1 text-start">السعر</th><th class="px-2 py-1 text-start">اسم المنتج</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${sample.map((r) => `<tr class="border-t border-slate-100">
-                  <td class="px-2 py-1" dir="ltr">${esc(r.itemNumber || '—')}</td>
-                  <td class="px-2 py-1">${esc(r.unit || '—')}</td>
-                  <td class="px-2 py-1">${fmtNum(r.price)}</td>
-                  <td class="px-2 py-1">${esc(r.name)}</td>
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>`;
-    }).join('');
-  }
-
-  function runCloudCompare() {
-    if (!cloudTabs) { toast('اجلب البيانات أولاً', 'error'); return; }
-    const agentTab = $('#cloud-sheet-agent').value;
-    const refTab = $('#cloud-sheet-ref').value;
-    const parsed = {};
-    for (const t of cloudTabs.tabs) parsed[t.name] = Parser.extractListRows(t.rows).rows;
-    const agentRows = parsed[agentTab] || parsed[Object.keys(parsed)[0]] || [];
-    const refRows = parsed[refTab] || parsed[Object.keys(parsed)[1]] || [];
-    if (!agentRows.length || !refRows.length) { toast('لا توجد بيانات كافية للمقارنة', 'error'); return; }
-
-    // كائن لستة مُفهرَس بخرائط Map للمرجع (مطابقة سريعة للقوائم الضخمة)
-    const refList = { id: 'clcmp_' + Date.now().toString(36), name: refTab, items: refRows.map((r) => ({ ...r })) };
-    Object.defineProperty(refList, '__ver', { value: 1, writable: true, enumerable: false, configurable: true });
-
-    const strictUnit = !$('#cloud-ignore-unit').checked;
-    const rows = agentRows.map((r) => {
-      const probe = strictUnit ? r : { ...r, unit: '' };
-      return Comparison.analyzeItem({ ...probe, quantity: 1, unitPrice: r.price }, refList);
-    });
-
-    const stats = { total: rows.length, matched: 0, high: 0, highTotal: 0, save: 0, saveTotal: 0, unknown: 0 };
-    for (const x of rows) {
-      if (x.status === Comparison.STATUS.MATCH) stats.matched++;
-      else if (x.status === Comparison.STATUS.HIGH) { stats.high++; stats.highTotal += x.unitDiff; }
-      else if (x.status === Comparison.STATUS.LOW) { stats.save++; stats.saveTotal += Math.abs(x.unitDiff); }
-      else stats.unknown++;
-    }
-    State.cloudCompareRows = rows;
-    State.cloudCompareStats = stats;
-    cloudComparePage = 0;
-    renderCloudCompare();
-  }
-
-  function renderCloudCompare() {
-    const rows = State.cloudCompareRows || [];
-    if (!$('#cloud-compare-body')) return;
-    if (!rows.length) { $('#cloud-compare-body').innerHTML = '<tr><td colspan="8" class="p-4 text-center text-slate-400 text-sm">لا توجد نتائج مقارنة.</td></tr>'; return; }
-
-    const diffOnly = $('#cloud-diff-only').checked;
-    let visible = diffOnly ? rows.filter((x) => x.status !== Comparison.STATUS.MATCH) : rows;
-    const pageSize = CLOUD.COMPARE_PAGE_SIZE || 200;
-    const pages = Math.max(1, Math.ceil(visible.length / pageSize));
-    cloudComparePage = Math.max(0, Math.min(cloudComparePage, pages - 1));
-    const slice = visible.slice(cloudComparePage * pageSize, cloudComparePage * pageSize + pageSize);
-
-    const st = State.cloudCompareStats || {};
-    const setTxt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-    setTxt('#cloud-sum-match', st.matched || 0);
-    setTxt('#cloud-sum-high', `${st.high || 0} · ${signedMoney(st.highTotal || 0)}`);
-    setTxt('#cloud-sum-save', `${st.save || 0} · −${money(st.saveTotal || 0)}`);
-    setTxt('#cloud-sum-unknown', st.unknown || 0);
-    setTxt('#cloud-total', `${st.total || 0} بند`);
-
-    $('#cloud-compare-body').innerHTML = slice.map((x, i) => {
-      const n = cloudComparePage * pageSize + i + 1;
-      const dx = x.status === Comparison.STATUS.UNKNOWN ? '<span class="clr-neutral">—</span>'
-        : Math.abs(x.unitDiff) < 1e-9 ? '<span class="clr-neutral">بدون فرق</span>'
-        : `<span class="${x.status === Comparison.STATUS.HIGH ? 'clr-high' : 'clr-low'}">${signedMoney(x.unitDiff)}</span>`;
-      return `<tr class="border-t border-slate-100 hover:bg-slate-50/70">
-        <td class="py-2 px-3 text-slate-400 text-xs font-bold">${n}</td>
-        <td class="py-2 px-3 text-xs" dir="ltr">${esc(x.item.itemNumber || '—')}</td>
-        <td class="py-2 px-3 text-sm">${esc(x.item.name)}</td>
-        <td class="py-2 px-3 text-xs">${esc(x.item.unit || '—')}</td>
-        <td class="py-2 px-3 text-xs">${money(x.invoiceTotal)}</td>
-        <td class="py-2 px-3 text-xs">${x.listPrice === null ? '—' : money(x.listPrice)}</td>
-        <td class="py-2 px-3 text-xs">${dx}</td>
-        <td class="py-2 px-3">${statusBadgeHTML(x.status)}</td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="8" class="p-4 text-center text-slate-400 text-sm">لا توجد نتائج مطابقة للفلتر.</td></tr>';
-
-    setTxt('#cloud-page-label', `${cloudComparePage + 1} / ${pages}`);
-    $('#cloud-prev').disabled = cloudComparePage === 0;
-    $('#cloud-next').disabled = cloudComparePage >= pages - 1;
-    const hasRows = rows.length > 0;
-    const copyBtn = $('#btn-cloud-copy'); if (copyBtn) copyBtn.disabled = !hasRows;
-    const xlsxBtn = $('#btn-cloud-export-xlsx'); if (xlsxBtn) xlsxBtn.disabled = !hasRows;
-  }
-
-  function cloudCompareTSV() {
-    const rows = State.cloudCompareRows || [];
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'سعر الموزع', 'سعر الشركة', 'الفرق', 'مؤشر المراجعة'].join('\t');
-    const body = rows.map((x, i) => {
-      const dx = x.status === Comparison.STATUS.UNKNOWN ? '—'
-        : Math.abs(x.unitDiff) < 1e-9 ? '0.00' : signedNum(x.unitDiff);
-      return [i + 1, x.item.itemNumber || '', x.item.name, x.item.unit || '',
-        fmtNum(x.invoiceTotal), x.listPrice === null ? '—' : fmtNum(x.listPrice),
-        dx, Comparison.statusText(x.status)].join('\t');
-    });
-    const st = State.cloudCompareStats || {};
-    return [header, ...body,
-      '',
-      ['مطابق', String(st.matched || 0), '', 'زيادة', `${st.high || 0} (${signedNum(st.highTotal || 0)})`, 'انخفاض', `${st.save || 0} (-${fmtNum(st.saveTotal || 0)})`, 'غير مسجل', String(st.unknown || 0)].join('\t'),
-    ].join('\n');
-  }
-
-  function exportCloudCompareXlsx() {
-    const rows = State.cloudCompareRows || [];
-    if (!rows.length) { toast('لا توجد نتائج لتصديرها', 'error'); return; }
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'سعر الموزع', 'سعر الشركة', 'الفرق', 'مؤشر المراجعة'];
-    const body = rows.map((x) => [
-      x.item.itemNumber || '', x.item.name, x.item.unit || '',
-      x.invoiceTotal, x.listPrice === null ? '' : x.listPrice,
-      x.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(x.unitDiff) < 1e-9 ? 0 : x.unitDiff),
-      Comparison.statusText(x.status),
-    ]);
-    Excel.exportXLSX('مقارنة موزع-شركة', [header, ...body], `مقارنة-${todayStr()}.xlsx`)
-      .then(() => toast('تم تنزيل تقرير المقارنة Excel ✓'))
-      .catch((err) => toast(err && err.message ? err.message : 'تعذّر تصدير Excel', 'error'));
-  }
-
   /* ─────────────────── ربط الأحداث ─────────────────── */
   function bindEvents() {
     // التبويبات
@@ -1393,7 +1174,7 @@
         onConfirm: () => { Invoices.clearAll(); renderHistory(); toast('تم مسح السجل'); },
       });
     });
-    $('#history-list').addEventListener('click', (e) => {
+$('#history-list').addEventListener('click', (e) => {
       const open = e.target.closest('[data-open]');
       const exp = e.target.closest('[data-exp]');
       const del = e.target.closest('[data-del]');
@@ -1405,31 +1186,6 @@
         confirmBox({ title: 'حذف فاتورة', message: `هل تريد حذف فاتورة ${inv.customer !== undefined && inv.customer !== null ? inv.customer : inv.vendor || 'بدون عميل'}؟`, confirmLabel: 'حذف', danger: true, onConfirm: () => { Invoices.remove(inv.id); renderHistory(); toast('تم حذف الفاتورة'); } });
       }
     });
-
-    // أزرار Excel من شاشة البيانات (للفاتورة فقط)
-    $('#btn-xlsx-invoice-2').addEventListener('click', () => $('#xlsx-invoice-file-2').click());
-    $('#xlsx-invoice-file-2').addEventListener('change', () => handleXlsxFile('#xlsx-invoice-file-2', '#paste-invoice', 'invoice', 'رتّبت الفاتورة'));
-
-    // تخزين مفتاح API وقيمتها عند الكتابة (للمقارنة السحابية)
-    $('#gs-api-key').addEventListener('input', (e) => {
-      State.settings.sheetApiKey = e.target.value.trim();
-      Storage.saveSettings(State.settings);
-    });
-
-    // لوحة المقارنة السحابية (موزع ضد شركة)
-    const cloudReady = () => !!(cloudTabs && State.cloudCompareRows && State.cloudCompareRows.length);
-    $('#btn-cloud-fetch').addEventListener('click', handleCloudFetch);
-    $('#cloud-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleCloudFetch(); } });
-    $('#btn-cloud-run-compare').addEventListener('click', runCloudCompare);
-    $('#cloud-ignore-unit').addEventListener('change', () => { if (cloudTabs) runCloudCompare(); });
-    $('#cloud-diff-only').addEventListener('change', () => { cloudComparePage = 0; renderCloudCompare(); });
-    $('#btn-cloud-copy').addEventListener('click', () => {
-      if (!cloudReady()) { toast('شغّل المقارنة أولاً', 'error'); return; }
-      copyText(cloudCompareTSV());
-    });
-    $('#btn-cloud-export-xlsx').addEventListener('click', exportCloudCompareXlsx);
-    $('#cloud-prev').addEventListener('click', () => { if (cloudComparePage > 0) { cloudComparePage--; renderCloudCompare(); } });
-    $('#cloud-next').addEventListener('click', () => { cloudComparePage++; renderCloudCompare(); });
   }
 
   /* ─────────────────── الإقلاع ───────────────────
@@ -1457,11 +1213,7 @@
 
     if (!$('#inv-date').value) $('#inv-date').value = todayStr();
 
-    const apiKeyEl = $('#gs-api-key');
-    if (apiKeyEl) apiKeyEl.value = State.settings.sheetApiKey || '';
-
     loadDraftIfAny();
-    seedCloudPanel();
     renderQuickList();
     renderCloudLists();
     renderDatalist();

@@ -119,19 +119,4 @@ window.CONFIG = {
 
   /* --- مكتبة SheetJS (للتعامل مع ملفات Excel محلياً) --- */
   XLSX_CDN: 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-
-  /* --- المقارنة السحابية: شيت منشور بتبويبين (موزع ضد شركة) ---
-     DEFAULT_URL: رابط Google Sheets منشور للنشر العام (pubhtml).
-     TABS: أسماء التبويبات المطلوبة بالترتيب (الأول = قائمة المُقارَن، الثاني = المرجع).
-     LABELS: أسماء عرض عربية لكل تبويب. */
-  CLOUD_COMPARE: {
-    DEFAULT_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLFu_tyMm4wGKbX60I0wqxed4OMHQDIIcd1omvVGCJyn1fqWn67lAVZeAeGIG1Dq_1L6gUfiFqLbIT/pubhtml',
-    TABS: ['AgentDist', 'Company'],
-    LABELS: {
-      AgentDist: 'الموزع (AgentDist)',
-      Company: 'الشركة الرئيسية (Company)',
-    },
-    PREVIEW_ROWS: 8,        // صفوف المعاينة لكل تبويب بعد الجلب
-    COMPARE_PAGE_SIZE: 200, // ترقيم تقرير المقارنة (لتجنب تهنيج المتصفح)
-  },
 };

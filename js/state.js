@@ -17,8 +17,6 @@
     syncBusy: false,
     lastSync: null,
     listPage: 0,            // صفحة جدول اللستة النشطة (ترقيم للبيانات الضخمة)
-    cloudCompareRows: [],   // نتائج المقارنة السحابية (موزع ضد شركة)
-    cloudCompareStats: null,// إحصائيات المقارنة السحابية {total,matched,high,save,unknown,…}
   };
 
   /* --- اشتراكات إعلام --- */
