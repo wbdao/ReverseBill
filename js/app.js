@@ -111,7 +111,7 @@
               <span class="w-10 h-10 shrink-0 rounded-xl ${c.bg} ${c.text} grid place-items-center text-lg"><i class="fa-solid ${esc(cfg.icon || 'fa-list')}"></i></span>
               <div class="min-w-0">
                 <p class="font-extrabold text-slate-800 text-sm truncate">${esc(cfg.name)}</p>
-                <p class="text-[11px] text-slate-400 truncate" dir="ltr">${esc(cfg.url || 'رابط غير مضبوط بعد')}${cfg.gid ? ` · gid=${esc(cfg.gid)}` : ''}</p>
+                <p class="text-[11px] text-slate-400 truncate" dir="ltr">${esc(cfg.slug || '')}</p>
               </div>
             </div>
             <span class="status-badge ${active ? 'status-match' : 'bg-slate-100 text-slate-500'}">${active ? 'النشطة' : 'لستة'}</span>
