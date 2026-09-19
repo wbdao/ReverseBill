@@ -377,13 +377,33 @@
   }
 
   function renderInvoiceItems() {
-    $('#items-table-body').innerHTML = State.items.map(itemRowHTML).join('');
+    // تحليل البنود دفعة واحدة: عدّ الملاحظات وتصفية الصفوف حسب الملاحظة المختارة
+    const counts = { match: 0, high: 0, low: 0, unknown: 0 };
+    const statusById = new Map();
+    for (const it of State.items) {
+      const st = Comparison.analyzeItem(it).status;
+      statusById.set(it.id, st);
+      if (counts[st] !== undefined) counts[st]++;
+    }
+    const f = State.statusFilter;
+    const filtered = f ? State.items.filter((it) => statusById.get(it.id) === f) : State.items;
     const hasItems = State.items.length > 0;
+
+    $('#items-table-body').innerHTML = filtered.map(itemRowHTML).join('')
+      || (hasItems ? '<tr><td colspan="15" class="py-10 text-center text-slate-400 text-sm">لا توجد بنود مطابقة لهذه الملاحظة.</td></tr>' : '');
     $('#empty-items').classList.toggle('hidden', hasItems);
     $('#items-table-wrap').classList.toggle('hidden', !hasItems);
     $('#items-count').textContent = hasItems
-      ? `عدد البنود: ${State.items.length} · اللستة المختارة: ${activeListName()}`
+      ? `عدد البنود: ${State.items.length}${f ? ` · المعروض: ${filtered.length}` : ''} · اللستة المختارة: ${activeListName()}`
       : `اللستة المختارة: ${activeListName()}`;
+
+    const countsEl = $('#status-counts');
+    if (countsEl) {
+      countsEl.innerHTML = hasItems
+        ? `🟢 ${counts.match} · 🔺 ${counts.high} · 🔻 ${counts.low} · ⚠️ ${counts.unknown}`
+        : '';
+    }
+    $$('#items-filter-bar [data-status-filter]').forEach((b) => b.classList.toggle('active', (b.dataset.statusFilter || '') === f));
     updateSummary();
   }
 
@@ -1074,6 +1094,14 @@
     $('#items-table-body').addEventListener('click', (e) => {
       const btn = e.target.closest('.remove-item');
       if (btn) removeItem(btn.dataset.id);
+    });
+
+    // تصفية بنود الفاتورة حسب ملاحظة مراجعة السعر
+    $('#items-filter-bar').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-status-filter]');
+      if (!chip) return;
+      State.statusFilter = chip.dataset.statusFilter || '';
+      renderInvoiceItems();
     });
 
     // حفظ تلقائي للمسودة

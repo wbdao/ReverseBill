@@ -13,6 +13,7 @@
     editingItemId: null,
     editingInvoiceId: null, // فاتورة السجل المفتوحة حالياً في المحرر (null = فاتورة جديدة)
     productFilter: '',
+    statusFilter: '',       // تصفية بنود الفاتورة حسب ملاحظة مراجعة السعر ('' | match | high | low | unknown)
     settings: Storage.getSettings(),
     syncBusy: false,
     lastSync: null,
