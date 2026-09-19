@@ -40,18 +40,21 @@
     }
     const listPrice = listItem !== null ? num(listItem.price) : null;
 
+    const unitPrice = num(item.unitPrice);
+
     if (listItem === null || listPrice === null) {
-      return { item, listItem: null, status: STATUS.UNKNOWN, listPrice: null, unitDiff: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit };
+      return { item, listItem: null, status: STATUS.UNKNOWN, listPrice: null, unitPrice, unitDiff: 0, unitDiffBefore: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit };
     }
 
     const unitDiff = netUnit - listPrice;
+    const unitDiffBefore = unitPrice - listPrice;   // فرق السعر قبل الخصم عن السعر المعتمد
     const totalDiff = unitDiff * qty;
     let status;
     if (Math.abs(unitDiff) < 1e-9) status = STATUS.MATCH;      // 🟢
     else if (unitDiff > 0) status = STATUS.HIGH;               // 🔺 زيادة في السعر (لصالح الشركة)
     else status = STATUS.LOW;                                  // 🔻 سعر أقل من المعتمد (خسارة / انخفاض خطير)
 
-    return { item, listItem, status, listPrice, unitDiff, totalDiff, expectedTotal: qty * listPrice, invoiceTotal, netUnit };
+    return { item, listItem, status, listPrice, unitPrice, unitDiff, unitDiffBefore, totalDiff, expectedTotal: qty * listPrice, invoiceTotal, netUnit };
   }
 
   /** تحليل مصفوفة بنود دفعة واحدة */

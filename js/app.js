@@ -322,6 +322,13 @@
     const cls = status === Comparison.STATUS.HIGH ? 'clr-high' : status === Comparison.STATUS.LOW ? 'clr-low' : 'clr-neutral';
     return `<span class="${cls}">${signedMoney(value)}</span>`;
   }
+  // فرق السعر قبل الخصم عن السعر المعتمد: أعلى من المعتمد (تحذير) / أدنى من المعتمد (جيد)
+  function prediffHTML(r) {
+    if (r.listPrice === null) return '<span class="clr-neutral">—</span>';
+    if (Math.abs(r.unitDiffBefore) < 1e-9) return '<span class="clr-neutral">يساوي المعتمد</span>';
+    const cls = r.unitDiffBefore > 0 ? 'clr-abv' : 'clr-bel';
+    return `<span class="${cls}">${signedMoney(r.unitDiffBefore)}</span>`;
+  }
   // عرض نسبة الخصم كرقم بدون علامة % (1% تظهر 1) مع قص الفضلة العشرية المتكررة
   const fmtPct = (p) => { const x = Math.round((num(p) * 100) * 100) / 100; return String(x); };
   function itemRowHTML(item, index) {
@@ -367,6 +374,7 @@
         <td class="py-2 px-3 font-bold cell-net">${money(r.netUnit)}</td>
         <td class="py-2 px-3 font-bold cell-total">${money(r.invoiceTotal)}</td>
         <td class="py-2 px-3 text-slate-600 cell-list">${r.listPrice === null ? '<span class="clr-neutral">—</span>' : money(r.listPrice)}</td>
+        <td class="py-2 px-3 cell-prediff">${prediffHTML(r)}</td>
         <td class="py-2 px-3 cell-udiff">${diffHTML(r.unitDiff, r.status)}</td>
         <td class="py-2 px-3 cell-tdiff">${diffHTML(r.totalDiff, r.status)}</td>
         <td class="py-2 px-3 cell-status">${statusBadgeHTML(r)}</td>
@@ -420,6 +428,7 @@
     tr.querySelector('.cell-net').innerHTML = money(r.netUnit);
     tr.querySelector('.cell-total').innerHTML = money(r.invoiceTotal);
     tr.querySelector('.cell-list').innerHTML = r.listPrice === null ? '<span class="clr-neutral">—</span>' : money(r.listPrice);
+    tr.querySelector('.cell-prediff').innerHTML = prediffHTML(r);
     tr.querySelector('.cell-status').innerHTML = statusBadgeHTML(r);
     tr.querySelector('.cell-udiff').innerHTML = diffHTML(r.unitDiff, r.status);
     tr.querySelector('.cell-tdiff').innerHTML = diffHTML(r.totalDiff, r.status);
@@ -772,7 +781,7 @@
   function reportToTSV() {
     const s = Comparison.summarize(State.items);
     const t = s.totals;
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'].join('\t');
+    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق قبل الخصم', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'].join('\t');
     const rows = State.items.map((it) => {
       const r = Comparison.analyzeItem(it);
       const ud = r.status === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.unitDiff) < 1e-9 ? '0.00' : signedNum(r.unitDiff));
@@ -783,6 +792,7 @@
         fmtNum(it.discountValue || 0), fmtPct(it.discountPct || 0), fmtNum(r.netUnit),
         fmtNum(r.invoiceTotal),
         r.listPrice === null ? '—' : fmtNum(r.listPrice),
+        r.listPrice === null ? '—' : (Math.abs(r.unitDiffBefore) < 1e-9 ? '0.00' : signedNum(r.unitDiffBefore)),
         ud, td, Comparison.statusText(r.status),
       ].join('\t');
     });
@@ -797,13 +807,14 @@
 
   /** مصفوفة خلايا لتصدير Excel مباشرة (أرقام حقيقية قابلة للحساب) */
   function reportToAOACells() {
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'];
+    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق قبل الخصم', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'];
     const body = State.items.map((it) => {
       const r = Comparison.analyzeItem(it);
       return [
         it.itemNumber || '', it.name, it.unit || '',
         it.quantity, it.unitPrice, it.discountValue || 0, it.discountPct || 0, r.netUnit, r.invoiceTotal,
         r.listPrice === null ? '' : r.listPrice,
+        r.listPrice === null ? '' : (Math.abs(r.unitDiffBefore) < 1e-9 ? 0 : r.unitDiffBefore),
         r.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(r.unitDiff) < 1e-9 ? 0 : r.unitDiff),
         r.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(r.totalDiff) < 1e-9 ? 0 : r.totalDiff),
         Comparison.statusText(r.status),

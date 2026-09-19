@@ -114,6 +114,8 @@
 .clr-high    { color: #e11d48; font-weight: 700; }
 .clr-low     { color: #ea580c; font-weight: 700; }
 .clr-neutral { color: #64748b; }
+.clr-abv     { color: #dc2626; font-weight: 700; } /* سعر قبل الخصم أعلى من المعتمد */
+.clr-bel     { color: #059669; font-weight: 700; } /* سعر قبل الخصم أدنى من المعتمد */
 
 /* حركات */
 @keyframes toastIn { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } }
