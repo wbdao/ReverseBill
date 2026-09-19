@@ -332,7 +332,7 @@
   // عرض نسبة الخصم كرقم بدون علامة % (1% تظهر 1) مع قص الفضلة العشرية المتكررة
   const fmtPct = (p) => { const x = Math.round((num(p) * 100) * 100) / 100; return String(x); };
   function itemRowHTML(item, index) {
-    const r = Comparison.analyzeItem(item);
+    const r = curAnalyze(item);
     return `
       <tr data-id="${item.id}" class="border-t border-slate-100 hover:bg-slate-50/70">
         <td class="py-2 px-3 text-slate-400 text-xs font-bold">${index + 1}</td>
@@ -389,7 +389,7 @@
     const counts = { match: 0, high: 0, low: 0, unknown: 0 };
     const statusById = new Map();
     for (const it of State.items) {
-      const st = Comparison.analyzeItem(it).status;
+      const st = curAnalyze(it).status;
       statusById.set(it.id, st);
       if (counts[st] !== undefined) counts[st]++;
     }
@@ -424,7 +424,7 @@
     const item = State.items.find((i) => i.id === id);
     const tr = document.querySelector(`#items-table-body tr[data-id="${id}"]`);
     if (!item || !tr) return;
-    const r = Comparison.analyzeItem(item);
+    const r = curAnalyze(item);
     tr.querySelector('.cell-net').innerHTML = money(r.netUnit);
     tr.querySelector('.cell-total').innerHTML = money(r.invoiceTotal);
     tr.querySelector('.cell-list').innerHTML = r.listPrice === null ? '<span class="clr-neutral">—</span>' : money(r.listPrice);
@@ -520,7 +520,7 @@
 
   /* ─────────────────── ملخص الفاتورة ─────────────────── */
   function updateSummary() {
-    const s = Comparison.summarize(State.items);
+    const s = curSummarize();
     const t = s.totals;
     let netLabel = 'صافي الفرق';
     let netDot = 'bg-slate-400';
@@ -528,6 +528,7 @@
     else if (s.netDiff < -0.004) { netLabel = 'انخفاض صافٍ عن المعتمد'; netDot = 'bg-amber-500'; }
     const cards = [
       { label: 'إجمالي الفاتورة', value: money(t.invoiceTotal), dot: 'bg-indigo-500', sub: `${State.items.length} بند · ${money(s.expectedTotal)} معتمد` },
+      { label: 'خصم الاتفاقية على الأصناف', value: State.invoiceDiscountPct ? `${fmtPct(State.invoiceDiscountPct)}%` : 'لا يوجد', dot: 'bg-emerald-500', sub: State.invoiceDiscountPct ? 'مطبّق على كل البنود في المقارنة' : 'أدخل النسبة في «خصم الاتفاقية %» لتطبيقها' },
       { label: 'الإجمالي المعتمد (القائمة المختارة)', value: money(s.expectedTotal), dot: 'bg-slate-400', sub: `«${activeListName()}» للبنود المسجلة فقط` },
       { label: 'إجمالي زيادة الأسعار', value: money(t.highTotal), dot: 'bg-rose-500', sub: t.highTotal > 0.004 ? 'أعلى من السعر المعتمد' : 'لا توجد زيادات' },
       { label: 'إجمالي الانخفاض عن المعتمد', value: money(t.lowTotal), dot: 'bg-amber-500', sub: t.lowTotal > 0.004 ? 'بيع دون السعر المعتمد — مراجعة عاجلة' : 'لا يوجد انخفاض', valueColor: t.lowTotal > 0.004 ? 'text-rose-600' : '' },
@@ -545,7 +546,12 @@
   }
 
   /* ─────────────────── الفاتورة: حفظ / مسودة / جديد ─────────────────── */
-  const readMeta = () => ({ customer: $('#inv-customer').value, invoiceNo: $('#inv-no').value, date: $('#inv-date').value, notes: $('#inv-notes').value });
+  // نسبة مئوية مُدخلة (مثل 5) → كسر (0.05). القيم تُقيّد بين 0 و100.
+  const pctToFraction = (raw) => { const n = parseNum(raw); return isNaN(n) ? 0 : Math.max(0, Math.min(100, n)) / 100; };
+  // تحليل بنود الفاتورة الحالية مع خصم الاتفاقية المطبّق على كل الأصناف
+  const curAnalyze = (it) => Comparison.analyzeItem(it, undefined, State.invoiceDiscountPct);
+  const curSummarize = () => Comparison.summarize(State.items, undefined, State.invoiceDiscountPct);
+  const readMeta = () => ({ customer: $('#inv-customer').value, invoiceNo: $('#inv-no').value, date: $('#inv-date').value, notes: $('#inv-notes').value, invoiceDiscountPct: pctToFraction($('#inv-discount-pct').value) });
   const saveDraft = () => Invoices.saveDraft({ ...readMeta(), listId: Lists.activeIdOf(), invoiceId: State.editingInvoiceId || null, items: State.items, savedAt: new Date().toISOString() });
 
   // زر الحفظ يتغيّر إلى "تحديث" عند العمل على فاتورة محفوظة مسبقاً
@@ -565,6 +571,8 @@
     $('#inv-no').value = draft.invoiceNo || '';
     $('#inv-date').value = draft.date || todayStr();
     $('#inv-notes').value = draft.notes || '';
+    State.invoiceDiscountPct = Number(draft.invoiceDiscountPct) || 0;
+    $('#inv-discount-pct').value = State.invoiceDiscountPct ? fmtPct(State.invoiceDiscountPct) : '';
     State.items = Array.isArray(draft.items) ? draft.items.map((it) => ({
       id: genId('it'),
       itemNumber: String(it.itemNumber || '').trim(),
@@ -594,8 +602,10 @@
   function resetCurrentInvoice(silent) {
     State.items = [];
     State.editingInvoiceId = null;
+    State.invoiceDiscountPct = 0;
     updateSaveButton();
     $('#inv-customer').value = $('#inv-no').value = $('#inv-notes').value = '';
+    $('#inv-discount-pct').value = '';
     $('#inv-date').value = todayStr();
     $('#item-name').value = $('#item-price').value = $('#item-unit').value = $('#item-number').value = '';
     $('#item-discount-value').value = $('#item-discount-pct').value = '';
@@ -623,6 +633,8 @@
       $('#inv-no').value = inv.invoiceNo || '';
       $('#inv-date').value = inv.date || todayStr();
       $('#inv-notes').value = inv.notes || '';
+      State.invoiceDiscountPct = Number(inv.invoiceDiscountPct) || 0;
+      $('#inv-discount-pct').value = State.invoiceDiscountPct ? fmtPct(State.invoiceDiscountPct) : '';
       saveDraft();
       renderInvoiceItems();
       switchTab('invoice');
@@ -742,7 +754,7 @@
     $('#empty-history').classList.toggle('hidden', list.length > 0);
     $('#history-list').innerHTML = list.map((inv) => {
       const refList = inv.listId ? Lists.getList(inv.listId) : Lists.active();
-      const s = Comparison.summarize(inv.items, refList);
+      const s = Comparison.summarize(inv.items, refList, Number(inv.invoiceDiscountPct) || 0);
       let badge = '<span class="status-badge status-match">متوازنة</span>';
       let value = signedMoney(s.netDiff);
       let vc = 'text-slate-500';
@@ -779,11 +791,11 @@
 
   /* ─────────────────── التقارير (TSV / Excel / طباعة) ─────────────────── */
   function reportToTSV() {
-    const s = Comparison.summarize(State.items);
+    const s = curSummarize();
     const t = s.totals;
     const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق قبل الخصم', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'].join('\t');
     const rows = State.items.map((it) => {
-      const r = Comparison.analyzeItem(it);
+      const r = curAnalyze(it);
       const ud = r.status === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.unitDiff) < 1e-9 ? '0.00' : signedNum(r.unitDiff));
       const td = r.status === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.totalDiff) < 1e-9 ? '0.00' : signedNum(r.totalDiff));
       return [
@@ -809,7 +821,7 @@
   function reportToAOACells() {
     const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق قبل الخصم', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'];
     const body = State.items.map((it) => {
-      const r = Comparison.analyzeItem(it);
+      const r = curAnalyze(it);
       return [
         it.itemNumber || '', it.name, it.unit || '',
         it.quantity, it.unitPrice, it.discountValue || 0, it.discountPct || 0, r.netUnit, r.invoiceTotal,
@@ -827,7 +839,7 @@
     const header = ['العميل', 'رقم الفاتورة', 'التاريخ', 'رقم الصنف', 'المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي البند'].join('\t');
     const rows = Invoices.getAll().flatMap((inv) =>
       inv.items.map((it) => {
-        const r = Comparison.analyzeItem(it);
+        const r = Comparison.analyzeItem(it, undefined, Number(inv.invoiceDiscountPct) || 0);
         return [
           inv.customer !== undefined && inv.customer !== null ? inv.customer : inv.vendor || '', inv.invoiceNo || '', inv.date || '',
           it.itemNumber || '', it.name || '', it.unit || '',
@@ -853,7 +865,7 @@
   /* 1) توليد صف <tr> لكل بند من مصفوفة البنود الحالية عبر محرك المقارنة */
   function printRowHTML(it, i) {
     try {
-      const r = Comparison.analyzeItem(it);
+      const r = curAnalyze(it);
       const st = r.status;
       const fmtDiff = (v) => {
         if (st === Comparison.STATUS.UNKNOWN || Math.abs(v) < 1e-9) return '—';
@@ -891,7 +903,7 @@
 
   /* 2) بطاقات الملخص + معادلة الصافي (داخل قالب الطباعة مباشرة تحت الجدول) */
   function buildPrintTotalsHTML() {
-    const s = Comparison.summarize(State.items);
+    const s = curSummarize();
     const t = s.totals;
     const isHigh = s.netDiff > 0.004, isLow = s.netDiff < -0.004;
     const cards = [
@@ -909,6 +921,7 @@
         صافي الفرق عن المعتمد: <b>${signedMoney(s.netDiff)}</b> &nbsp;·&nbsp;
         الانحراف: <b>${fmtNum(s.deviationPct)}%</b> &nbsp;·&nbsp;
         البنود غير المسجلة بالقائمة: <b>${t.unknownCount}</b> (${money(t.unknownTotal)})<br/>
+        ${State.invoiceDiscountPct ? `خصم الاتفاقية المطبّق على كل الأصناف: <b>${fmtPct(State.invoiceDiscountPct)}%</b><br/>` : ''}
         ${isHigh ? '<span class="eq-high">زيادة صافية عن المعتمد</span>' : isLow ? '<span class="eq-low">انخفاض صافٍ عن المعتمد</span>' : '<span class="eq-ok">الفاتورة متوازنة مع المعتمد</span>'}
       </div>`;
   }
@@ -917,7 +930,7 @@
         بكل تنسيقاته inline: خط أسود صريح + خلفية بيضاء على كل خلية ترويسة */
   function buildPrintDocumentHTML() {
     const meta = readMeta();
-    const s = Comparison.summarize(State.items);
+    const s = curSummarize();
     const t = s.totals;
     const customer = (meta.customer !== undefined && meta.customer !== null) ? meta.customer : meta.vendor || '—';
     const qtySum = State.items.reduce((a, it) => a + (Number(it.quantity) || 0), 0);
@@ -963,7 +976,7 @@
   </div>
   <div class="meta">
     <div><b>العميل:</b> ${esc(customer)} &nbsp;|&nbsp; <b>رقم الفاتورة:</b> ${esc(meta.invoiceNo || '—')}</div>
-    <div><b>تاريخ الفاتورة:</b> ${esc(meta.date || todayStr())} &nbsp;|&nbsp; <b>القائمة المعتمدة:</b> ${esc(activeListName())}</div>
+    <div><b>تاريخ الفاتورة:</b> ${esc(meta.date || todayStr())} &nbsp;|&nbsp; <b>القائمة المعتمدة:</b> ${esc(activeListName())}${meta.invoiceDiscountPct ? ` &nbsp;|&nbsp; <b>خصم الاتفاقية:</b> ${fmtPct(meta.invoiceDiscountPct)}%` : ''}</div>
   </div>
   <table>
     <thead>
@@ -1117,6 +1130,13 @@
 
     // حفظ تلقائي للمسودة
     ['#inv-customer', '#inv-no', '#inv-date', '#inv-notes'].forEach((sel) => $(sel).addEventListener('input', saveDraft));
+
+    // خصم الاتفاقية على كل الأصناف: يحدّث الحالة والتحليل والمسودة فوراً
+    $('#inv-discount-pct').addEventListener('input', () => {
+      State.invoiceDiscountPct = pctToFraction($('#inv-discount-pct').value);
+      updateAllRowsAndSummary();
+      saveDraft();
+    });
 
     // أزرار الفاتورة
     $('#btn-save-invoice').addEventListener('click', saveInvoice);

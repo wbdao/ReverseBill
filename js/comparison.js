@@ -23,11 +23,14 @@
   }
 
   /** تحليل بند واحد مقابل لستة معتمدة (كائن لستة أو null للاستعانة بالنشطة)
-      المقارنة تتم على صافي السعر بعد الخصم (وهو المبلغ الفعلي الذي يُدفع للعميل). */
-  function analyzeItem(item, listOverride) {
+    المقارنة تتم على صافي السعر بعد الخصم (وهو المبلغ الفعلي الذي يُدفع للعميل).
+    invoiceDiscountPct: نسبة خصم الاتفاقية على كامل الفاتورة (كسر 0.05 = 5%)
+    تُطبق فوق خصومات البند نفسه فتلحق بكل المؤشرات. */
+  function analyzeItem(item, listOverride, invoiceDiscountPct) {
     const qty = num(item.quantity);
     const unit = num(item.unitPrice);
-    const netUnit = netUnitOf(item);
+    const invDisc = Math.max(0, Math.min(1, num(invoiceDiscountPct)));
+    const netUnit = Math.max(0, netUnitOf(item) * (1 - invDisc));
     const invoiceTotal = qty * netUnit;
     // لستة المقارنة: المعطاة صراحة → وإلا النشطة عبر مخزن الذاكرة المركزي window.appLists
     let listItem = null;
@@ -43,7 +46,7 @@
     const unitPrice = num(item.unitPrice);
 
     if (listItem === null || listPrice === null) {
-      return { item, listItem: null, status: STATUS.UNKNOWN, listPrice: null, unitPrice, unitDiff: 0, unitDiffBefore: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit };
+      return { item, listItem: null, status: STATUS.UNKNOWN, listPrice: null, unitPrice, unitDiff: 0, unitDiffBefore: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
     }
 
     const unitDiff = netUnit - listPrice;
@@ -54,15 +57,15 @@
     else if (unitDiff > 0) status = STATUS.HIGH;               // 🔺 زيادة في السعر (لصالح الشركة)
     else status = STATUS.LOW;                                  // 🔻 سعر أقل من المعتمد (خسارة / انخفاض خطير)
 
-    return { item, listItem, status, listPrice, unitPrice, unitDiff, unitDiffBefore, totalDiff, expectedTotal: qty * listPrice, invoiceTotal, netUnit };
+    return { item, listItem, status, listPrice, unitPrice, unitDiff, unitDiffBefore, totalDiff, expectedTotal: qty * listPrice, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
   }
 
   /** تحليل مصفوفة بنود دفعة واحدة */
-  const analyzeBatch = (items, listOverride) => items.map((it) => analyzeItem(it, listOverride));
+  const analyzeBatch = (items, listOverride, invoiceDiscountPct) => items.map((it) => analyzeItem(it, listOverride, invoiceDiscountPct));
 
   /** تلخيص مالي للبنود */
-  function summarize(items, listOverride) {
-    const rows = analyzeBatch(items, listOverride);
+  function summarize(items, listOverride, invoiceDiscountPct) {
+    const rows = analyzeBatch(items, listOverride, invoiceDiscountPct);
     const totals = { invoiceTotal: 0, expectedTotal: 0, knownInvoiceTotal: 0, highTotal: 0, lowTotal: 0, unknownCount: 0, unknownTotal: 0, matchCount: 0 };
     for (const r of rows) {
       totals.invoiceTotal += r.invoiceTotal;

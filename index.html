@@ -136,10 +136,11 @@
             <select id="quick-list" class="input !w-auto !py-1.5 text-sm font-bold"></select>
           </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
           <div class="field"><label for="inv-customer">اسم العميل</label><input type="text" id="inv-customer" class="input" placeholder="مثال: شركة النور للتجارة" /></div>
           <div class="field"><label for="inv-no">رقم الفاتورة</label><input type="text" id="inv-no" class="input" placeholder="اختياري" /></div>
           <div class="field"><label for="inv-date">تاريخ الفاتورة</label><input type="date" id="inv-date" class="input" /></div>
+          <div class="field"><label for="inv-discount-pct" title="نسبة خصم متفق عليها على كامل الفاتورة (مثل 4% أو 5% أو 10%) تُطبق على جميع البنود في مراجعة الأسعار">خصم الاتفاقية %</label><input type="number" min="0" max="100" step="any" id="inv-discount-pct" class="input" placeholder="0" /></div>
           <div class="field"><label for="inv-notes">ملاحظات</label><input type="text" id="inv-notes" class="input" placeholder="اختياري" /></div>
         </div>
         <div class="flex flex-wrap gap-2 mt-4">

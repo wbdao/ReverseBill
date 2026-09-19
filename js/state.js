@@ -14,6 +14,7 @@
     editingInvoiceId: null, // فاتورة السجل المفتوحة حالياً في المحرر (null = فاتورة جديدة)
     productFilter: '',
     statusFilter: '',       // تصفية بنود الفاتورة حسب ملاحظة مراجعة السعر ('' | match | high | low | unknown)
+    invoiceDiscountPct: 0,  // خصم الاتفاقية على كامل الفاتورة (كسر 0.05 = 5%)
     settings: Storage.getSettings(),
     syncBusy: false,
     lastSync: null,
