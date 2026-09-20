@@ -49,15 +49,20 @@
       return { item, listItem: null, status: STATUS.UNKNOWN, listPrice: null, unitPrice, unitDiff: 0, unitDiffBefore: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
     }
 
-    const unitDiff = netUnit - listPrice;
+    // عند تفعيل خصم الاتفاقية على الفاتورة يُقاس الفرق ومؤشر المراجعة
+    // مقابل «السعر المعتمد بعد الخصم» (reference) بدلاً من السعر الخام:
+    // - بيع بالسعر المعتمد مع الخصم المُعتمد → «خصم معتمد»
+    // - بكل ما يقل عن ذلك → «أقل من السعر المعتمد بعد الخصم»
+    const reference = listPrice * (1 - invDisc);
+    const unitDiff = netUnit - reference;
     const unitDiffBefore = unitPrice - listPrice;   // فرق السعر قبل الخصم عن السعر المعتمد
     const totalDiff = unitDiff * qty;
     let status;
-    if (Math.abs(unitDiff) < 1e-9) status = STATUS.MATCH;      // 🟢
-    else if (unitDiff > 0) status = STATUS.HIGH;               // 🔺 زيادة في السعر (لصالح الشركة)
-    else status = STATUS.LOW;                                  // 🔻 سعر أقل من المعتمد (خسارة / انخفاض خطير)
+    if (Math.abs(unitDiff) < 1e-9) status = STATUS.MATCH;      // 🟢 خصم معتمد / مطابق
+    else if (unitDiff > 0) status = STATUS.HIGH;               // 🔺 أعلى من المعتمد
+    else status = STATUS.LOW;                                  // 🔻 أقل من المعتمد (بعد الخصم)
 
-    return { item, listItem, status, listPrice, unitPrice, unitDiff, unitDiffBefore, totalDiff, expectedTotal: qty * listPrice, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
+    return { item, listItem, status, listPrice, unitPrice, unitDiff, unitDiffBefore, totalDiff, expectedTotal: qty * reference, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
   }
 
   /** تحليل مصفوفة بنود دفعة واحدة */
@@ -82,19 +87,21 @@
     return { rows, totals, netDiff, deviationPct };
   }
 
-  const statusLabel = (status) => {
+  const statusLabel = (status, invoiceDiscountPct) => {
+    // عند تفعيل خصم الاتفاقية تُستبدل ملاحظة «مطابق» بـ «خصم معتمد»،
+    // وتتحول «أقل من المعتمد» إلى «أقل من السعر المعتمد بعد الخصم».
     switch (status) {
-      case STATUS.MATCH: return '🟢 مطابق';
-      case STATUS.HIGH: return '🔺 زيادة في السعر';
-      case STATUS.LOW: return '🔻 سعر منخفض خطير';
+      case STATUS.MATCH: return invoiceDiscountPct > 0 ? '🟢 خصم معتمد' : '🟢 مطابق';
+      case STATUS.HIGH: return '🔺 أعلى من المعتمد';
+      case STATUS.LOW: return invoiceDiscountPct > 0 ? '🔻 أقل من السعر المعتمد بعد الخصم' : '🔻 أقل من المعتمد';
       default: return '⚠️ غير مسجل بالقائمة';
     }
   };
-  const statusText = (status) => {
+  const statusText = (status, invoiceDiscountPct) => {
     switch (status) {
-      case STATUS.MATCH: return 'مطابق';
-      case STATUS.HIGH: return 'زيادة في السعر';
-      case STATUS.LOW: return 'سعر منخفض خطير';
+      case STATUS.MATCH: return invoiceDiscountPct > 0 ? 'خصم معتمد' : 'مطابق';
+      case STATUS.HIGH: return 'أعلى من المعتمد';
+      case STATUS.LOW: return invoiceDiscountPct > 0 ? 'أقل من السعر المعتمد بعد الخصم' : 'أقل من المعتمد';
       default: return 'غير مسجل بالقائمة';
     }
   };

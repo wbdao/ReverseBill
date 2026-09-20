@@ -314,7 +314,7 @@
 
   /* ─────────────────── جدول بنود الفاتورة ─────────────────── */
   function statusBadgeHTML(r) {
-    return `<span class="status-badge status-${r.status}">${Comparison.statusLabel(r.status)}</span>`;
+    return `<span class="status-badge status-${r.status}">${Comparison.statusLabel(r.status, r.invoiceDiscountPct)}</span>`;
   }
   function diffHTML(value, status) {
     if (status === Comparison.STATUS.UNKNOWN) return '<span class="clr-neutral">—</span>';
@@ -805,7 +805,7 @@
         fmtNum(r.invoiceTotal),
         r.listPrice === null ? '—' : fmtNum(r.listPrice),
         r.listPrice === null ? '—' : (Math.abs(r.unitDiffBefore) < 1e-9 ? '0.00' : signedNum(r.unitDiffBefore)),
-        ud, td, Comparison.statusText(r.status),
+        ud, td, Comparison.statusText(r.status, r.invoiceDiscountPct),
       ].join('\t');
     });
     const summary = [
@@ -829,7 +829,7 @@
         r.listPrice === null ? '' : (Math.abs(r.unitDiffBefore) < 1e-9 ? 0 : r.unitDiffBefore),
         r.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(r.unitDiff) < 1e-9 ? 0 : r.unitDiff),
         r.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(r.totalDiff) < 1e-9 ? 0 : r.totalDiff),
-        Comparison.statusText(r.status),
+        Comparison.statusText(r.status, r.invoiceDiscountPct),
       ];
     });
     return [header, ...body];
@@ -885,7 +885,7 @@
         <td>${r.listPrice == null ? '—' : fmtNum(r.listPrice)}</td>
         <td>${fmtDiff(r.unitDiff)}</td>
         <td>${fmtDiff(r.totalDiff)}</td>
-        <td>${Comparison.statusText(st)}</td>
+        <td>${Comparison.statusText(st, r.invoiceDiscountPct)}</td>
       </tr>`;
     } catch (e) {
       // بند معطوب لا يُفرّغ الجدول كاملاً — صف احتياطي يُبقي التقرير مقروءاً
