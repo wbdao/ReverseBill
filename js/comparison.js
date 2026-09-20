@@ -23,14 +23,16 @@
   }
 
   /** تحليل بند واحد مقابل لستة معتمدة (كائن لستة أو null للاستعانة بالنشطة)
-    المقارنة تتم على صافي السعر بعد الخصم (وهو المبلغ الفعلي الذي يُدفع للعميل).
-    invoiceDiscountPct: نسبة خصم الاتفاقية على كامل الفاتورة (كسر 0.05 = 5%)
-    تُطبق فوق خصومات البند نفسه فتلحق بكل المؤشرات. */
+    netUnit = صافي سعر البند على الفاتورة (بعد خصومات البند المسحوبة من السيستم)
+    — لا يتأثر إطلاقاً بخصم الاتفاقية: المرسل كما نُفّذ بالفعل.
+    invoiceDiscountPct (خصم معتمد 0.05 = 5%) معيار مقارنة فقط: يُقاس فرق البند
+    والمؤشر مقابل «السعر المعتمد بعد الخصم» reference = listPrice*(1-D)
+    دون تغيير أي أرقام من الفاتورة. */
   function analyzeItem(item, listOverride, invoiceDiscountPct) {
     const qty = num(item.quantity);
     const unit = num(item.unitPrice);
     const invDisc = Math.max(0, Math.min(1, num(invoiceDiscountPct)));
-    const netUnit = Math.max(0, netUnitOf(item) * (1 - invDisc));
+    const netUnit = Math.max(0, netUnitOf(item));   // المرسل على الفاتورة — غير مخصوم من الاتفاقية
     const invoiceTotal = qty * netUnit;
     // لستة المقارنة: المعطاة صراحة → وإلا النشطة عبر مخزن الذاكرة المركزي window.appLists
     let listItem = null;

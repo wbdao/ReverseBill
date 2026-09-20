@@ -528,7 +528,7 @@
     else if (s.netDiff < -0.004) { netLabel = 'انخفاض صافٍ عن المعتمد'; netDot = 'bg-amber-500'; }
     const cards = [
       { label: 'إجمالي الفاتورة', value: money(t.invoiceTotal), dot: 'bg-indigo-500', sub: `${State.items.length} بند · ${money(s.expectedTotal)} معتمد` },
-      { label: 'خصم الاتفاقية على الأصناف', value: State.invoiceDiscountPct ? `${fmtPct(State.invoiceDiscountPct)}%` : 'لا يوجد', dot: 'bg-emerald-500', sub: State.invoiceDiscountPct ? 'مطبّق على كل البنود في المقارنة' : 'أدخل النسبة في «خصم الاتفاقية %» لتطبيقها' },
+      { label: 'خصم الاتفاقية على الأصناف', value: State.invoiceDiscountPct ? `${fmtPct(State.invoiceDiscountPct)}%` : 'لا يوجد', dot: 'bg-emerald-500', sub: State.invoiceDiscountPct ? 'معيار للمقارنة — لا يُحتسب من إجمالي الفاتورة' : 'أدخل النسبة في «خصم الاتفاقية %» لتفعيله' },
       { label: 'الإجمالي المعتمد (القائمة المختارة)', value: money(s.expectedTotal), dot: 'bg-slate-400', sub: `«${activeListName()}» للبنود المسجلة فقط` },
       { label: 'إجمالي زيادة الأسعار', value: money(t.highTotal), dot: 'bg-rose-500', sub: t.highTotal > 0.004 ? 'أعلى من السعر المعتمد' : 'لا توجد زيادات' },
       { label: 'إجمالي الانخفاض عن المعتمد', value: money(t.lowTotal), dot: 'bg-amber-500', sub: t.lowTotal > 0.004 ? 'بيع دون السعر المعتمد — مراجعة عاجلة' : 'لا يوجد انخفاض', valueColor: t.lowTotal > 0.004 ? 'text-rose-600' : '' },
@@ -921,7 +921,7 @@
         صافي الفرق عن المعتمد: <b>${signedMoney(s.netDiff)}</b> &nbsp;·&nbsp;
         الانحراف: <b>${fmtNum(s.deviationPct)}%</b> &nbsp;·&nbsp;
         البنود غير المسجلة بالقائمة: <b>${t.unknownCount}</b> (${money(t.unknownTotal)})<br/>
-        ${State.invoiceDiscountPct ? `خصم الاتفاقية المطبّق على كل الأصناف: <b>${fmtPct(State.invoiceDiscountPct)}%</b><br/>` : ''}
+        ${State.invoiceDiscountPct ? `خصم الاتفاقية المعتمد (معيار المقارنة): <b>${fmtPct(State.invoiceDiscountPct)}%</b><br/>` : ''}
         ${isHigh ? '<span class="eq-high">زيادة صافية عن المعتمد</span>' : isLow ? '<span class="eq-low">انخفاض صافٍ عن المعتمد</span>' : '<span class="eq-ok">الفاتورة متوازنة مع المعتمد</span>'}
       </div>`;
   }
