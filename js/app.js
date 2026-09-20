@@ -944,7 +944,7 @@
 <title>تقرير مراجعة فاتورة — ${esc(meta.invoiceNo || '')}</title>
 <style>
   * { box-sizing: border-box; }
-  @page { size: A4 portrait; margin: 12mm 10mm; }
+  @page { size: A4 landscape; margin: 12mm 10mm; }
   html, body { margin: 0; padding: 0; background: #fff; font-family: 'Tajawal','Segoe UI',Arial,sans-serif; color: #000000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   h1 { font-size: 20px; margin: 0 0 4px; color: #000000; }
   .title { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #000000; padding-bottom: 10px; margin-bottom: 12px; page-break-after: avoid; }
