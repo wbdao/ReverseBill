@@ -377,19 +377,9 @@
         }
         return arr[0];
       }
-      if (nm) {
-        const nArr = idx.byName.get(nm);
-        if (nArr && nArr.length) {
-          if (nu) {
-            const byU = nArr.filter((it) => normalizeUnit(it.unit) === nu);
-            if (byU.length) return byU[0];
-            const noUnit = nArr.filter((it) => !normalizeUnit(it.unit));
-            if (noUnit.length) return noUnit[0];
-            return null;
-          }
-          return nArr[0];
-        }
-      }
+      // الاعتماد على الكود لا الاسم أثناء الدمج (جلب Google Sheets):
+      // كود غير موجود → يُحفظ البند كبند مستقل، فلا يُدمج كود قديم/جديد
+      // بنفس الاسم في سطر واحد بسعر خاطئ.
       return null;
     }
     if (nm) {
