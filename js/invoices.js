@@ -49,6 +49,7 @@
       date: data.date || todayStr(),
       notes: String(data.notes || '').trim(),
       listId: data.listId || Lists.activeIdOf() || null,
+      invoiceDiscountPct: Number(data.invoiceDiscountPct) || 0,
       items: (data.items || []).map(normalizeItem),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -70,6 +71,7 @@
       date: data.date || todayStr(),
       notes: String(data.notes || '').trim(),
       listId: data.listId || prev.listId || Lists.activeIdOf() || null,
+      invoiceDiscountPct: Number(data.invoiceDiscountPct) || 0,
       items: (data.items || []).map(normalizeItem),
       updatedAt: new Date().toISOString(),
     };
@@ -118,6 +120,7 @@
         date: raw.date || todayStr(),
         notes: String(raw.notes || '').trim(),
         listId: raw.listId || null,
+        invoiceDiscountPct: Number(raw.invoiceDiscountPct) || 0,
         items: Array.isArray(raw.items) ? raw.items.map(normalizeItem) : [],
         createdAt: raw.createdAt || new Date().toISOString(),
       };
