@@ -120,19 +120,9 @@
           }
           return arr[0]; // لا وحدة معطاة في البند: نطابق بالكود فقط
         }
-        if (nm) {
-          const nmArr = D.idx.byName.get(nm);
-          if (nmArr && nmArr.length) {
-            if (nu) {
-              const byU = nmArr.filter((it) => normalizeUnit(it.unit) === nu);
-              if (byU.length) return byU[0];
-              const noUnit = nmArr.filter((it) => !normalizeUnit(it.unit));
-              if (noUnit.length) return noUnit[0];
-              return null;
-            }
-            return nmArr[0];
-          }
-        }
+        // الاعتماد على كود الصنف لا الاسم: الكود غير موجود باللستة = «غير مسجل».
+        // (بعض الأصناف لها كود قديم وكود جديد بنفس الاسم ولكل كود سعره
+        //  الخاص — المطابقة بالاسم قد تسحب سعر الكود الخطأ)
         return null;
       }
       if (nm) {
@@ -168,6 +158,8 @@
         }
         return byNum[0];
       }
+      // الاعتماد على الكود لا الاسم: الكود غير موجود باللستة = «غير مسجل»
+      return null;
     }
     if (nm) {
       const byName = items.filter((it) => normalizeName(it.name) === nm);
