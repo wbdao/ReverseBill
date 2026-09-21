@@ -362,7 +362,7 @@
                  class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
         </td>
         <td class="py-2 px-3 w-28">
-          <input type="number" min="0" step="any" value="${item.discountValue ? fmtNum(item.discountValue) : ''}"
+          <input type="number" min="0" step="any" value="${item.discountValue || ''}"
                  data-field="discountValue" data-id="${item.id}" placeholder="0.00"
                  class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
         </td>
