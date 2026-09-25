@@ -13,13 +13,14 @@
   const STATUS = { MATCH: 'match', HIGH: 'high', LOW: 'low', UNKNOWN: 'unknown' };
 
   /** صافي سعر الوحدة بعد الخصومات:
+      الصافي = السعر − خصم القيمة − (السعر × خصم النسبة)
       discountPct مُخزَّن ككسر (1% = 0.01) — الإدخال اليدوي يقسم قيمته على 100
       ليتطابق مع سحب السيستم (الذي يأتي بالفعل ككسر). القيمة تُحدّ من الأسفل بصفر. */
   function netUnitOf(item) {
     const unit = num(item.unitPrice);
     const pct = num(item.discountPct);
     const value = num(item.discountValue);
-    return Math.max(0, unit * (1 - pct) - value);
+    return Math.max(0, unit - value - unit * pct);
   }
 
   /** تحليل بند واحد مقابل لستة معتمدة (كائن لستة أو null للاستعانة بالنشطة)
