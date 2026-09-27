@@ -219,7 +219,7 @@
   }
 
   /* ─────────────────── المقارنة الشاملة بين كل اللستات ─────────────────── */
-  const cmpState = { rows: [] };
+  const cmpState = { rows: [], filter: '', q: '' };
   const cmpNames = () => (CONFIG.LISTS || []).map((c) => c.name);
 
   function runAllListCompare() {
@@ -253,13 +253,20 @@
       </tr>`;
     }
 
-    const diffOnly = $('#cmp-diff-only') ? $('#cmp-diff-only').checked : false;
+    const flag = cmpState.filter;
+    const q = cmpState.q.toLocaleLowerCase('ar-EG');
     let rows = cmpState.rows || [];
-    if (diffOnly) rows = rows.filter((r) => r.status === 'diff');
+    if (flag) rows = rows.filter((r) => r.status === flag);
+    if (q) rows = rows.filter((r) =>
+      String(r.itemNumber || '').toLocaleLowerCase('ar-EG').includes(q)
+      || String(r.name || '').toLocaleLowerCase('ar-EG').includes(q)
+      || String(r.unit || '').toLocaleLowerCase('ar-EG').includes(q));
     const st = $('#cmp-status');
     if (st) {
-      st.textContent = `${cmpState.rows.length} صنف موحّد · ${cmpState.rows.filter((r) => r.status === 'match').length} مطابق في كل اللستات · ${cmpState.rows.filter((r) => r.status === 'diff').length} بسعر متفاوت · ${cmpState.rows.filter((r) => r.status === 'single').length} مسجّل في لستة واحدة · معروض: ${rows.length}`;
+      const base = `${cmpState.rows.length} صنف موحّد · ${cmpState.rows.filter((r) => r.status === 'match').length} مطابق في كل اللستات · ${cmpState.rows.filter((r) => r.status === 'diff').length} بسعر متفاوت · ${cmpState.rows.filter((r) => r.status === 'single').length} مسجّل في لستة واحدة`;
+      st.textContent = (flag || q) ? `${base} · معروض: ${rows.length}` : base;
     }
+    $$('#cmp-filter-bar [data-status-filter]').forEach((b) => b.classList.toggle('active', (b.dataset.statusFilter || '') === flag));
 
     const body = $('#cmp-body');
     if (!body) return;
@@ -1192,7 +1199,18 @@
 
     // المقارنة الشاملة بين كل اللستات
     $('#btn-cmp-run').addEventListener('click', runAllListCompare);
-    $('#cmp-diff-only').addEventListener('change', renderAllListCompare);
+    let cmpSearchTimer = null;
+    $('#cmp-q').addEventListener('input', (e) => {
+      if (!cmpState.rows.length) { cmpState.q = e.target.value.trim(); return; }
+      clearTimeout(cmpSearchTimer);
+      cmpSearchTimer = setTimeout(() => { cmpState.q = e.target.value.trim(); renderAllListCompare(); }, 150);
+    });
+    $('#cmp-filter-bar').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-status-filter]');
+      if (!chip) return;
+      cmpState.filter = chip.dataset.statusFilter || '';
+      renderAllListCompare();
+    });
     $('#btn-cmp-copy').addEventListener('click', () => {
       if (!cmpState.rows.length) { toast('شغّل المقارنة أولاً', 'error'); return; }
       copyText(allListCmpTSV());

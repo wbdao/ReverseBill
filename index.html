@@ -322,12 +322,18 @@
         <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
           <h2 class="section-title"><i class="fa-solid fa-scale-balanced text-indigo-500 me-1.5"></i>المقارنة الشاملة بين كل اللستات</h2>
           <div class="flex flex-wrap items-center gap-2 text-xs font-bold">
-            <label class="inline-flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" id="cmp-diff-only" class="accent-indigo-600 w-4 h-4" /> إظهار المتفاوت فقط
-            </label>
             <button id="btn-cmp-run" class="btn btn-primary text-xs px-3 py-1.5"><i class="fa-solid fa-scale-balanced"></i> تشغيل المقارنة</button>
             <button id="btn-cmp-copy" class="btn btn-ghost text-xs px-3 py-1.5"><i class="fa-solid fa-table"></i> نسخ كجدول</button>
             <button id="btn-cmp-export-xlsx" class="btn btn-ghost text-xs px-3 py-1.5"><i class="fa-solid fa-file-excel text-green-600"></i> تنزيل Excel</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <input type="search" id="cmp-q" class="input grow min-w-52" placeholder="ابحث باسم الصنف أو الكود أو الوحدة..." />
+          <div id="cmp-filter-bar" class="flex flex-wrap items-center gap-2">
+            <button type="button" data-status-filter="" class="filter-chip">الكل</button>
+            <button type="button" data-status-filter="match" class="filter-chip">🟢 متطابق</button>
+            <button type="button" data-status-filter="diff" class="filter-chip">⚠️ متفاوت</button>
+            <button type="button" data-status-filter="single" class="filter-chip">🔵 في لستة واحدة</button>
           </div>
         </div>
         <p class="text-xs text-slate-500 mb-3 leading-6">
