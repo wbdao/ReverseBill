@@ -19,7 +19,10 @@
   const signedNum = (n) => (n > 0 ? '+' : '') + fmtNum(n);
 
   /* --- تحويل الأرقام العربية والهندية إلى لاتينية ثم رقم فعلي --- */
+  // الفاصلة العشرية العربية ٫ → نقطة، وفاصل الآلاف العربي ٬ يُحذف (12٫5 = 12.5 لا 125)
   const toWestern = (s) => String(s)
+    .replace(/٫/g, '.')
+    .replace(/٬/g, '')
     .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
     .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
   const parseNum = (s) => {
@@ -27,6 +30,8 @@
     return isNaN(n) ? 0 : n;
   };
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  // هل الخلية تحمل رقماً فعلياً؟ (parseNum تُرجع 0 لأي نص، فلا تكفي للتمييز بين "0" و"abc")
+  const isNumeric = (s) => s !== null && s !== undefined && /\d/.test(toWestern(s));
 
   /* --- تطبيع النصوص --- */
   // للمطابقة الدقيقة: يزيل المسافات/الرموز ويحوّل للصغار
@@ -154,7 +159,7 @@
   }
 
   global.Utils = {
-    $, $$, fmtNum, money, signedMoney, signedNum, toWestern, parseNum, num,
+    $, $$, fmtNum, money, signedMoney, signedNum, toWestern, parseNum, num, isNumeric,
     normKey, normalizeNum, normalizeName, normalizeUnit,
     esc, todayStr, genId, copyText, downloadText, downloadJSON, downloadTSV,
     importFile, toast, confirmBox, batchProcess,

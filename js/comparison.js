@@ -36,20 +36,22 @@
     const netUnit = Math.max(0, netUnitOf(item));   // المرسل على الفاتورة — غير مخصوم من الاتفاقية
     const invoiceTotal = qty * netUnit;
     // لستة المقارنة: المعطاة صراحة → وإلا النشطة عبر مخزن الذاكرة المركزي window.appLists
-    let listItem = null;
+    // المطابقة تشمل الحجم واللون: صنف بمتغيرات بأسعار مختلفة بلا حجم/لون في البند = ambiguous
+    const args = [item.itemNumber, item.name, item.unit, item.size, item.color];
+    let res;
     if (!listOverride) {
       const act = Lists.active();
-      if (act && act.cfgSlug) listItem = Lists.findInStore(act.cfgSlug, item.itemNumber, item.name, item.unit);
-      else listItem = act ? Lists.matchInList(act, item.itemNumber, item.name, item.unit) : null;
+      res = act && act.cfgSlug ? Lists.resolveInStore(act.cfgSlug, ...args) : Lists.resolveInList(act, ...args);
     } else {
-      listItem = Lists.matchInList(listOverride, item.itemNumber, item.name, item.unit);
+      res = Lists.resolveInList(listOverride, ...args);
     }
-    const listPrice = listItem !== null ? num(listItem.price) : null;
+    const listItem = res.item;
+    const listPrice = listItem ? num(listItem.price) : null;
 
     const unitPrice = num(item.unitPrice);
 
-    if (listItem === null || listPrice === null) {
-      return { item, listItem: null, status: STATUS.UNKNOWN, listPrice: null, unitPrice, unitDiff: 0, unitDiffBefore: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
+    if (!listItem) {
+      return { item, listItem: null, status: STATUS.UNKNOWN, ambiguous: !!res.ambiguous, variants: res.variants || null, listPrice: null, unitPrice, unitDiff: 0, unitDiffBefore: 0, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
     }
 
     // عند تفعيل خصم الاتفاقية على الفاتورة يُقاس الفرق ومؤشر المراجعة
@@ -57,13 +59,15 @@
     // - بيع بالسعر المعتمد مع الخصم المُعتمد → «خصم معتمد»
     // - بكل ما يقل عن ذلك → «أقل من السعر المعتمد بعد الخصم»
     const reference = listPrice * (1 - invDisc);
-    const unitDiff = netUnit - reference;
     const unitDiffBefore = unitPrice - listPrice;   // فرق السعر قبل الخصم عن السعر المعتمد
+    // فرق ضمن هامش التقريب (CONFIG.PRICE_TOLERANCE) = مطابق، ويُصفَّر حتى لا يتسرب للملخص
+    const tol = num((global.CONFIG || {}).PRICE_TOLERANCE) || 1e-9;
+    if (Math.abs(netUnit - reference) <= tol + 1e-9) {                                // 🟢 خصم معتمد / مطابق
+      return { item, listItem, status: STATUS.MATCH, listPrice, unitPrice, unitDiff: 0, unitDiffBefore, totalDiff: 0, expectedTotal: invoiceTotal, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
+    }
+    const unitDiff = netUnit - reference;
     const totalDiff = unitDiff * qty;
-    let status;
-    if (Math.abs(unitDiff) < 1e-9) status = STATUS.MATCH;      // 🟢 خصم معتمد / مطابق
-    else if (unitDiff > 0) status = STATUS.HIGH;               // 🔺 أعلى من المعتمد
-    else status = STATUS.LOW;                                  // 🔻 أقل من المعتمد (بعد الخصم)
+    const status = unitDiff > 0 ? STATUS.HIGH : STATUS.LOW;   // 🔺 أعلى / 🔻 أقل من المعتمد (بعد الخصم)
 
     return { item, listItem, status, listPrice, unitPrice, unitDiff, unitDiffBefore, totalDiff, expectedTotal: qty * reference, invoiceTotal, netUnit, invoiceDiscountPct: invDisc };
   }
@@ -90,7 +94,9 @@
     return { rows, totals, netDiff, deviationPct };
   }
 
-  const statusLabel = (status, invoiceDiscountPct) => {
+  // ambiguous: الصنف مسجل بأكثر من حجم/لون بأسعار مختلفة والبند لم يحدد أيها
+  const statusLabel = (status, invoiceDiscountPct, ambiguous) => {
+    if (status === STATUS.UNKNOWN && ambiguous) return '⚠️ يحتاج تحديد الحجم/اللون';
     // عند تفعيل خصم الاتفاقية تُستبدل ملاحظة «مطابق» بـ «خصم معتمد»،
     // وتتحول «أقل من المعتمد» إلى «أقل من السعر المعتمد بعد الخصم».
     switch (status) {
@@ -100,7 +106,8 @@
       default: return '⚠️ غير مسجل بالقائمة';
     }
   };
-  const statusText = (status, invoiceDiscountPct) => {
+  const statusText = (status, invoiceDiscountPct, ambiguous) => {
+    if (status === STATUS.UNKNOWN && ambiguous) return 'يحتاج تحديد الحجم/اللون';
     switch (status) {
       case STATUS.MATCH: return invoiceDiscountPct > 0 ? 'خصم معتمد' : 'مطابق';
       case STATUS.HIGH: return 'أعلى من المعتمد';
@@ -109,7 +116,6 @@
     }
   };
 
-  global.Comparison = { STATUS, analyzeItem, analyzeBatch, summarize, statusLabel, statusText, netUnitOf };
 
   /* ================= المقارنة الشاملة بين كل اللستات =================
      يقرأ الأصناف مباشرة من مخزن الذاكرة المركزي window.appLists (بالترتيب حسب
@@ -124,7 +130,8 @@
     const keyOf = (it) => {
       const nc = global.Utils.normalizeNum(it.itemNumber);
       const nm = global.Utils.normalizeName(it.name);
-      return (nc ? 'n:' + nc : 'm:' + nm) + '\u0000' + global.Utils.normalizeUnit(it.unit);
+      const U = global.Utils.normalizeUnit;
+      return (nc ? 'n:' + nc : 'm:' + nm) + '\u0000' + U(it.unit) + '\u0000' + U(it.size) + '\u0000' + U(it.color);
     };
     const map = new Map();
     for (let li = 0; li < width; li++) {
@@ -138,7 +145,7 @@
         const k = keyOf(it);
         let row = map.get(k);
         if (!row) {
-          row = { itemNumber: it.itemNumber, name: it.name, unit: it.unit, prices: new Array(width).fill(null), present: new Set() };
+          row = { itemNumber: it.itemNumber, name: it.name, unit: it.unit, size: it.size || '', color: it.color || '', prices: new Array(width).fill(null), present: new Set() };
           map.set(k, row);
         }
         if (row.present.has(li)) continue;
@@ -151,7 +158,7 @@
       const min = vals.length ? Math.min.apply(null, vals) : null;
       const max = vals.length ? Math.max.apply(null, vals) : null;
       return {
-        itemNumber: r.itemNumber, name: r.name, unit: r.unit, prices: r.prices,
+        itemNumber: r.itemNumber, name: r.name, unit: r.unit, size: r.size, color: r.color, prices: r.prices,
         min, max,
         diff: vals.length > 1 ? (max - min) : 0,
         presentCount: r.present.size,

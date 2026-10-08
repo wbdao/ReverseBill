@@ -24,16 +24,28 @@
   const count = () => invList.length;
 
   function normalizeItem(it) {
-    return {
+    const out = {
       itemNumber: String(it.itemNumber || '').trim(),
       name: String(it.name || '').trim(),
       unit: String(it.unit || '').trim(),
+      size: String(it.size || '').trim(),
+      color: String(it.color || '').trim(),
       quantity: Number(it.quantity) || 0,
       unitPrice: Number(it.unitPrice) || 0,
       discountValue: Number(it.discountValue) || 0,
       discountPct: Number(it.discountPct) || 0,
     };
+    // لقطة السعر المعتمد وقت الحفظ (null = غير مسجل بالقائمة حينها)
+    if ('listPrice' in it) {
+      const lp = it.listPrice === null || it.listPrice === '' ? NaN : Number(it.listPrice);
+      out.listPrice = Number.isFinite(lp) ? lp : null;
+    }
+    return out;
   }
+  const snapshotOf = (d, prev) => ({
+    listName: String(d.listName || (prev && prev.listName) || '').trim(),
+    priceSnapshotAt: d.priceSnapshotAt || null,
+  });
 
   // قراءة متوافقة: تحويلة `customer` الجديدة مع دعم البيانات القديمة المحفوظة تحت `vendor`
   const customerOf = (d) => {
@@ -49,6 +61,7 @@
       date: data.date || todayStr(),
       notes: String(data.notes || '').trim(),
       listId: data.listId || Lists.activeIdOf() || null,
+      ...snapshotOf(data),
       invoiceDiscountPct: Number(data.invoiceDiscountPct) || 0,
       items: (data.items || []).map(normalizeItem),
       createdAt: new Date().toISOString(),
@@ -71,6 +84,7 @@
       date: data.date || todayStr(),
       notes: String(data.notes || '').trim(),
       listId: data.listId || prev.listId || Lists.activeIdOf() || null,
+      ...snapshotOf(data, prev),
       invoiceDiscountPct: Number(data.invoiceDiscountPct) || 0,
       items: (data.items || []).map(normalizeItem),
       updatedAt: new Date().toISOString(),
@@ -120,6 +134,7 @@
         date: raw.date || todayStr(),
         notes: String(raw.notes || '').trim(),
         listId: raw.listId || null,
+        ...snapshotOf(raw),
         invoiceDiscountPct: Number(raw.invoiceDiscountPct) || 0,
         items: Array.isArray(raw.items) ? raw.items.map(normalizeItem) : [],
         createdAt: raw.createdAt || new Date().toISOString(),

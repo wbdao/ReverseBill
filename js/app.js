@@ -155,17 +155,21 @@
         ? await Sheets.fetchTab(cfg.url, { gid })
         : await Sheets.fetchTab(cfg.url, { name: cfg.tab || cfg.slug });
       const { rows } = Parser.extractListRows(rowsMatrix);
-      // الخلفية تُدخل بأجزاء متقاطعة مع الخيط (idle)؛ النشطة فورياً وكلها مرّة واحدة
+      // الخلفية تُدخل بأجزاء متقاطعة مع الخيط (idle)؛ النشطة فورياً وكلها مرّة واحدة.
+      // replace: اللستة تُستبدل بنسخة الشيت (الأصناف المحذوفة من المصدر لا تبقى بأسعار قديمة)
       const res = defer
-        ? await Lists.importRowsChunked(list.id, rows)
-        : Lists.importRows(list.id, rows);
+        ? await Lists.importRowsChunked(list.id, rows, { replace: true })
+        : await Lists.importRows(list.id, rows, { replace: true });
       list.syncedAt = new Date().toISOString();
       list.lastError = null;
       Storage.savePriceLists(Lists.all(), Lists.activeIdOf());
       renderCloudLists();
       // إعادة الرسم الكاملة للمسار النشط الفوري فقط؛ الخلفية تكتفي بحالة البطاقات
       if (!defer) { renderListItems(); renderDatalist(); renderQuickList(); updateAllRowsAndSummary(); }
-      if (!silent) toast(`✓ «${cfg.name}»: ${res.total} صنف${res.added ? ` · ${res.added} جديد` : ''}${res.updated ? ` · ${res.updated} تحديث` : ''}`);
+      if (!silent) {
+        const delta = res.total - (res.previous || 0);
+        toast(`✓ «${cfg.name}»: ${res.total} صنف${res.previous && delta ? ` (${delta > 0 ? '+' : ''}${delta} عن السابق)` : ''}`);
+      }
     } catch (err) {
       list.lastError = (err && err.message) ? err.message : 'فشل الجلب';
       Storage.savePriceLists(Lists.all(), Lists.activeIdOf());
@@ -247,6 +251,8 @@
         <th class="text-right py-2 px-3">رقم الصنف</th>
         <th class="text-right py-2 px-3">اسم المنتج</th>
         <th class="text-right py-2 px-3">الوحدة</th>
+        <th class="text-right py-2 px-3">الحجم</th>
+        <th class="text-right py-2 px-3">اللون</th>
         ${names.map((n) => `<th class="text-right py-2 px-3">${esc(n)}</th>`).join('')}
         <th class="text-right py-2 px-3">فرق السعر</th>
         <th class="text-right py-2 px-3">الملاحظة</th>
@@ -260,7 +266,8 @@
     if (q) rows = rows.filter((r) =>
       String(r.itemNumber || '').toLocaleLowerCase('ar-EG').includes(q)
       || String(r.name || '').toLocaleLowerCase('ar-EG').includes(q)
-      || String(r.unit || '').toLocaleLowerCase('ar-EG').includes(q));
+      || String(r.unit || '').toLocaleLowerCase('ar-EG').includes(q)
+      || variantOf(r).toLocaleLowerCase('ar-EG').includes(q));
     const st = $('#cmp-status');
     if (st) {
       const base = `${cmpState.rows.length} صنف موحّد · ${cmpState.rows.filter((r) => r.status === 'match').length} مطابق في كل اللستات · ${cmpState.rows.filter((r) => r.status === 'diff').length} بسعر متفاوت · ${cmpState.rows.filter((r) => r.status === 'single').length} مسجّل في لستة واحدة`;
@@ -288,19 +295,21 @@
         <td class="py-2 px-3 text-xs" dir="ltr">${esc(r.itemNumber || '—')}</td>
         <td class="py-2 px-3 font-bold text-slate-800">${esc(r.name)}</td>
         <td class="py-2 px-3 text-xs text-slate-500">${esc(r.unit || '—')}</td>
+        <td class="py-2 px-3 text-xs text-slate-500" dir="ltr">${esc(r.size || '—')}</td>
+        <td class="py-2 px-3 text-xs text-slate-500" dir="ltr">${esc(r.color || '—')}</td>
         ${cells}
         <td class="py-2 px-3 font-extrabold whitespace-nowrap ${r.diff > 1e-9 ? 'text-rose-600' : 'text-slate-400'}">${r.diff > 1e-9 ? fmtNum(r.diff) : '—'}</td>
         <td class="py-2 px-3">${note}</td>
       </tr>`;
-    }).join('') || `<tr><td colspan="${names.length + 5}" class="py-8 text-center text-slate-400">لا توجد نتائج — حدّث اللستات أولاً.</td></tr>`;
+    }).join('') || `<tr><td colspan="${names.length + 7}" class="py-8 text-center text-slate-400">لا توجد نتائج — حدّث اللستات أولاً.</td></tr>`;
   }
 
   function allListCmpTSV() {
     const names = cmpNames();
     const noteOf = (r) => (r.status === 'diff' ? 'متفاوت' : r.status === 'match' ? 'متطابق' : 'في لستة واحدة');
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', ...names, 'فرق السعر', 'الملاحظة'].join('\t');
+    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الحجم', 'اللون', ...names, 'فرق السعر', 'الملاحظة'].join('\t');
     const body = (cmpState.rows || []).map((r) => [
-      r.itemNumber || '', r.name, r.unit || '',
+      r.itemNumber || '', r.name, r.unit || '', r.size || '', r.color || '',
       ...names.map((_, li) => (r.prices[li] == null ? '' : fmtNum(r.prices[li]))),
       r.diff > 1e-9 ? fmtNum(r.diff) : '', noteOf(r),
     ].join('\t'));
@@ -310,9 +319,9 @@
   function allListCmpAOA() {
     const names = cmpNames();
     const noteOf = (r) => (r.status === 'diff' ? 'متفاوت' : r.status === 'match' ? 'متطابق' : 'في لستة واحدة');
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', ...names, 'فرق السعر', 'الملاحظة'];
+    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الحجم', 'اللون', ...names, 'فرق السعر', 'الملاحظة'];
     const body = (cmpState.rows || []).map((r) => [
-      r.itemNumber || '', r.name, r.unit || '',
+      r.itemNumber || '', r.name, r.unit || '', r.size || '', r.color || '',
       ...names.map((_, li) => (r.prices[li] == null ? '' : r.prices[li])),
       r.diff > 1e-9 ? r.diff : '', noteOf(r),
     ]);
@@ -321,8 +330,14 @@
 
   /* ─────────────────── جدول بنود الفاتورة ─────────────────── */
   function statusBadgeHTML(r) {
-    return `<span class="status-badge status-${r.status}">${Comparison.statusLabel(r.status, r.invoiceDiscountPct)}</span>`;
+    // صنف بمتغيرات حجم/لون بأسعار مختلفة: تلميح بالمتغيرات المسجلة وأسعارها
+    const tip = r.ambiguous && r.variants
+      ? ` title="${esc(r.variants.map((v) => `${[v.size, v.color].filter(Boolean).join(' / ') || '—'}: ${fmtNum(v.price)}`).join(' · '))}"`
+      : '';
+    return `<span class="status-badge status-${r.status}"${tip}>${Comparison.statusLabel(r.status, r.invoiceDiscountPct, r.ambiguous)}</span>`;
   }
+  const statusTextOf = (r) => Comparison.statusText(r.status, r.invoiceDiscountPct, r.ambiguous);
+  const variantOf = (x) => [x.size, x.color].filter(Boolean).join(' / ');
   function diffHTML(value, status) {
     if (status === Comparison.STATUS.UNKNOWN) return '<span class="clr-neutral">—</span>';
     if (Math.abs(value) < 1e-9) return '<span class="clr-neutral">بدون فرق</span>';
@@ -356,6 +371,16 @@
         <td class="py-2 px-3 w-24">
           <input type="text" value="${esc(item.unit || '')}" placeholder="الوحدة"
                  data-field="unit" data-id="${item.id}" autocomplete="off"
+                 class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
+        </td>
+        <td class="py-2 px-3 w-24">
+          <input type="text" value="${esc(item.size || '')}" placeholder="—"
+                 data-field="size" data-id="${item.id}" autocomplete="off"
+                 class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
+        </td>
+        <td class="py-2 px-3 w-24">
+          <input type="text" value="${esc(item.color || '')}" placeholder="—"
+                 data-field="color" data-id="${item.id}" autocomplete="off"
                  class="cell-input w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-400" />
         </td>
         <td class="py-2 px-3 w-20">
@@ -405,7 +430,7 @@
     const hasItems = State.items.length > 0;
 
     $('#items-table-body').innerHTML = filtered.map(itemRowHTML).join('')
-      || (hasItems ? '<tr><td colspan="15" class="py-10 text-center text-slate-400 text-sm">لا توجد بنود مطابقة لهذه الملاحظة.</td></tr>' : '');
+      || (hasItems ? '<tr><td colspan="17" class="py-10 text-center text-slate-400 text-sm">لا توجد بنود مطابقة لهذه الملاحظة.</td></tr>' : '');
     $('#empty-items').classList.toggle('hidden', hasItems);
     $('#items-table-wrap').classList.toggle('hidden', !hasItems);
     $('#items-count').textContent = hasItems
@@ -446,24 +471,19 @@
   function updateItemField(id, field, rawValue) {
     const item = State.items.find((i) => i.id === id);
     if (!item) return;
+    const look = () => Lists.findInStore(activeSlugOf(), item.itemNumber, item.name, item.unit, item.size, item.color);
     if (field === 'itemNumber') {
       item.itemNumber = rawValue;
-      const li = Lists.findInStore(activeSlugOf(), item.itemNumber, item.name, item.unit);
+      const li = look();
       if (li) {
         if (!item.name) { item.name = li.name; syncCell(id, 'name', li.name); }
         if (!item.unit) { item.unit = li.unit || ''; syncCell(id, 'unit', item.unit); }
         if (!parseNum(item.unitPrice)) { item.unitPrice = num(li.price); syncCell(id, 'unitPrice', item.unitPrice); }
       }
-    } else if (field === 'name') {
-      item.name = rawValue;
+    } else if (field === 'name' || field === 'unit' || field === 'size' || field === 'color') {
+      item[field] = rawValue;
       if (!parseNum(item.unitPrice)) {
-        const li = Lists.findInStore(activeSlugOf(), item.itemNumber, item.name, item.unit);
-        if (li) { item.unitPrice = num(li.price); syncCell(id, 'unitPrice', item.unitPrice); }
-      }
-    } else if (field === 'unit') {
-      item.unit = rawValue;
-      if (!parseNum(item.unitPrice)) {
-        const li = Lists.findInStore(activeSlugOf(), item.itemNumber, item.name, item.unit);
+        const li = look();
         if (li) { item.unitPrice = num(li.price); syncCell(id, 'unitPrice', item.unitPrice); }
       }
     } else if (field === 'quantity') {
@@ -491,6 +511,8 @@
     const itemNumber = $('#item-number').value.trim();
     const name = $('#item-name').value.trim();
     const unit = $('#item-unit').value.trim();
+    const size = $('#item-size').value.trim();
+    const color = $('#item-color').value.trim();
     const qty = parseNum($('#item-qty').value) || 1;
     let unitPrice = parseNum($('#item-price').value);
     const priceEmpty = $('#item-price').value.trim() === '';
@@ -499,7 +521,7 @@
     if (!key) { toast('أدخل اسم المنتج أو رقم الصنف أولاً', 'error'); $('#item-name').focus(); return; }
 
     if (!unitPrice && priceEmpty) {
-      const li = Lists.findInStore(activeSlugOf(), itemNumber, name, unit);
+      const li = Lists.findInStore(activeSlugOf(), itemNumber, name, unit, size, color);
       if (li) unitPrice = num(li.price);
     }
     if (!unitPrice && priceEmpty) {
@@ -513,7 +535,7 @@
     // خصم النسبة يُدخل كنسبة (1 = 1%) ويُخزن ككسر (0.01) للاتساق مع سحب السيستم
     const discountPct = discountPctRaw === '' ? 0 : Math.max(0, parseNum(discountPctRaw) / 100);
 
-    State.items.push({ id: genId('it'), itemNumber, name: name || itemNumber, unit, quantity: qty, unitPrice, discountValue, discountPct });
+    State.items.push({ id: genId('it'), itemNumber, name: name || itemNumber, unit, size, color, quantity: qty, unitPrice, discountValue, discountPct });
     renderInvoiceItems();
     saveDraft();
     $('#item-qty').value = '1';
@@ -521,6 +543,7 @@
     $('#item-discount-value').value = '';
     $('#item-discount-pct').value = '';
     $('#item-unit').value = $('#item-number').value = '';
+    $('#item-size').value = $('#item-color').value = '';
     $('#item-name').value = '';
     $('#item-name').focus();
   }
@@ -534,9 +557,9 @@
     if (s.netDiff > 0.004) { netLabel = 'زيادة صافية عن المعتمد'; netDot = 'bg-rose-500'; }
     else if (s.netDiff < -0.004) { netLabel = 'انخفاض صافٍ عن المعتمد'; netDot = 'bg-amber-500'; }
     const cards = [
-      { label: 'إجمالي الفاتورة', value: money(t.invoiceTotal), dot: 'bg-indigo-500', sub: `${State.items.length} بند · ${money(s.expectedTotal)} معتمد` },
+      { label: 'إجمالي الفاتورة', value: money(t.invoiceTotal), dot: 'bg-indigo-500', sub: `${State.items.length} بند · ${money(t.expectedTotal)} معتمد` },
       { label: 'خصم الاتفاقية على الأصناف', value: State.invoiceDiscountPct ? `${fmtPct(State.invoiceDiscountPct)}%` : 'لا يوجد', dot: 'bg-emerald-500', sub: State.invoiceDiscountPct ? 'معيار للمقارنة — لا يُحتسب من إجمالي الفاتورة' : 'أدخل النسبة في «خصم الاتفاقية %» لتفعيله' },
-      { label: 'الإجمالي المعتمد (القائمة المختارة)', value: money(s.expectedTotal), dot: 'bg-slate-400', sub: `«${activeListName()}» للبنود المسجلة فقط` },
+      { label: 'الإجمالي المعتمد (القائمة المختارة)', value: money(t.expectedTotal), dot: 'bg-slate-400', sub: `«${activeListName()}» للبنود المسجلة فقط` },
       { label: 'إجمالي زيادة الأسعار', value: money(t.highTotal), dot: 'bg-rose-500', sub: t.highTotal > 0.004 ? 'أعلى من السعر المعتمد' : 'لا توجد زيادات' },
       { label: 'إجمالي الانخفاض عن المعتمد', value: money(t.lowTotal), dot: 'bg-amber-500', sub: t.lowTotal > 0.004 ? 'بيع دون السعر المعتمد — مراجعة عاجلة' : 'لا يوجد انخفاض', valueColor: t.lowTotal > 0.004 ? 'text-rose-600' : '' },
       { label: netLabel, value: signedMoney(s.netDiff), dot: netDot, sub: `انحراف ${fmtNum(s.deviationPct)}% عن المعتمد`, valueColor: s.netDiff > 0.004 ? 'text-rose-600' : s.netDiff < -0.004 ? 'text-amber-600' : '' },
@@ -585,6 +608,8 @@
       itemNumber: String(it.itemNumber || '').trim(),
       name: String(it.name || '').trim(),
       unit: String(it.unit || '').trim(),
+      size: String(it.size || '').trim(),
+      color: String(it.color || '').trim(),
       quantity: it.quantity ?? 1,
       unitPrice: Number(it.unitPrice) || 0,
       discountValue: Number(it.discountValue) || 0,
@@ -598,7 +623,12 @@
   function saveInvoice() {
     if (!State.items.length) { toast('أضف بنداً واحداً على الأقل قبل الحفظ', 'error'); switchTab('invoice'); return; }
     const editing = State.editingInvoiceId && Invoices.getById(State.editingInvoiceId);
-    const inv = Invoices.save({ ...readMeta(), items: State.items }, State.editingInvoiceId);
+    // لقطة السعر المعتمد وقت الحفظ: السجل يُراجَع بأسعار يوم الحفظ لا بأسعار آخر تحديث للستات
+    const items = State.items.map((it) => ({ ...it, listPrice: curAnalyze(it).listPrice }));
+    const inv = Invoices.save({
+      ...readMeta(), items,
+      listId: Lists.activeIdOf(), listName: activeListName(), priceSnapshotAt: new Date().toISOString(),
+    }, State.editingInvoiceId);
     Invoices.clearDraft();
     const no = inv.invoiceNo ? `"${inv.invoiceNo}" ` : '';
     toast(editing ? `تم تحديث الفاتورة ${no}في السجل — لا تكرار` : `تم حفظ الفاتورة ${no}في السجل بنجاح`);
@@ -616,6 +646,7 @@
     $('#inv-date').value = todayStr();
     $('#item-name').value = $('#item-price').value = $('#item-unit').value = $('#item-number').value = '';
     $('#item-discount-value').value = $('#item-discount-pct').value = '';
+    $('#item-size').value = $('#item-color').value = '';
     $('#item-qty').value = '1';
     Invoices.clearDraft();
     renderInvoiceItems();
@@ -632,7 +663,7 @@
     const inv = Invoices.getById(id);
     if (!inv) return;
     const proceed = () => {
-      State.items = inv.items.map((it) => ({ id: genId('it'), itemNumber: it.itemNumber || '', name: it.name, unit: it.unit || '', quantity: it.quantity, unitPrice: it.unitPrice, discountValue: Number(it.discountValue) || 0, discountPct: Number(it.discountPct) || 0 }));
+      State.items = inv.items.map((it) => ({ id: genId('it'), itemNumber: it.itemNumber || '', name: it.name, unit: it.unit || '', size: it.size || '', color: it.color || '', quantity: it.quantity, unitPrice: it.unitPrice, discountValue: Number(it.discountValue) || 0, discountPct: Number(it.discountPct) || 0 }));
       if (inv.listId && Lists.getList(inv.listId)) { Lists.setActive(inv.listId); renderQuickList(); renderCloudLists(); renderDatalist(); }
       State.editingInvoiceId = inv.id;
       updateSaveButton();
@@ -680,7 +711,8 @@
     const filtered = !q ? all : all.filter((p) =>
       p.name.toLocaleLowerCase('ar-EG').includes(q)
       || String(p.itemNumber || '').toLocaleLowerCase('ar-EG').includes(q)
-      || String(p.unit || '').toLocaleLowerCase('ar-EG').includes(q));
+      || String(p.unit || '').toLocaleLowerCase('ar-EG').includes(q)
+      || variantOf(p).toLocaleLowerCase('ar-EG').includes(q));
     const pageSize = CONFIG.LIST_PAGE_SIZE;
     const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
     if (State.listPage >= pageCount) State.listPage = pageCount - 1;
@@ -692,9 +724,11 @@
             <td class="py-2.5 px-3 font-bold text-slate-700 dir-ltr">${esc(p.itemNumber || '—')}</td>
             <td class="py-2.5 px-3 font-bold text-slate-800">${esc(p.name)}</td>
             <td class="py-2.5 px-3 text-xs text-slate-500">${esc(p.unit || '—')}</td>
+            <td class="py-2.5 px-3 text-xs text-slate-500" dir="ltr">${esc(p.size || '—')}</td>
+            <td class="py-2.5 px-3 text-xs text-slate-500" dir="ltr">${esc(p.color || '—')}</td>
             <td class="py-2.5 px-3 font-extrabold text-indigo-700">${money(p.price)}</td>
           </tr>`).join('')
-      : '<tr><td colspan="4" class="py-10 text-center text-slate-400">لا توجد أصناف مطابقة في اللستة النشطة.</td></tr>';
+      : '<tr><td colspan="6"class="py-10 text-center text-slate-400">لا توجد أصناف مطابقة في اللستة النشطة.</td></tr>';
 
     $('#prod-stats').textContent = `أصناف اللستة «${activeListName()}»: ${all.length} · معروض: ${filtered.length}`;
     renderPager(pageCount, filtered.length);
@@ -728,14 +762,14 @@
   /* ─────────────────── اللصق السريع (فاتورة فقط) ─────────────────── */
   function applyPasteInvoice() {
     const rows = Parser.parseRows($('#paste-invoice').value);
-    const { items, ignored, autofilled, unknown } = Parser.extractInvoiceItems(rows.map((r) => r.cells), { autoPrice: true });
+    // لا يُملأ سعر غائب من اللستة: أداة مراجعة تُظهر البند بلا سعر بدل أن تعرضه «مطابقاً»
+    const { items, ignored, noPrice } = Parser.extractInvoiceItems(rows.map((r) => r.cells), { autoPrice: false });
     if (!items.length) { toast('لم تُعثر على بنود صالحة — تأكد من وجود أعمدة: اسم/رقم الصنف، الكمية، والسعر.', 'error'); return; }
     State.items.push(...items.map((it) => ({ ...it, id: genId('it') })));
     renderInvoiceItems();
     saveDraft();
-    const extra = autofilled ? ` · اتُملئ سعر ${autofilled} بند تلقائياً من اللستة` : '';
-    const unk = unknown ? ` · ${unknown} بند بلا سعر مؤكد (يُعرض كغير مسجل) — أكمل سعره يدوياً` : '';
-    toast(`تم لصق ${items.length} بند في الفاتورة · ${ignored} صفّ متجاهل${extra}${unk}`);
+    const np = noPrice ? ` · ⚠️ ${noPrice} بند بلا سعر في المصدر (سعره 0 ويظهر أقل من المعتمد) — راجعه` : '';
+    toast(`تم لصق ${items.length} بند في الفاتورة · ${ignored} صفّ متجاهل${np}`, noPrice ? 'error' : 'success');
     $('#paste-invoice').value = '';
   }
 
@@ -760,7 +794,17 @@
     const list = Invoices.getAll();
     $('#empty-history').classList.toggle('hidden', list.length > 0);
     $('#history-list').innerHTML = list.map((inv) => {
-      const refList = inv.listId ? Lists.getList(inv.listId) : Lists.active();
+      // الأولوية للقطة الأسعار المحفوظة مع الفاتورة؛ الفواتير القديمة (بلا لقطة) تُقارن بلستتها
+      // إن كانت متاحة، وإلا باللستة النشطة مع توضيح ذلك بدل الصمت.
+      const snap = inv.priceSnapshotAt
+        ? inv.items.filter((it) => it.listPrice !== null && it.listPrice !== undefined)
+          .map((it) => ({ itemNumber: it.itemNumber, name: it.name, unit: it.unit, size: it.size, color: it.color, price: it.listPrice }))
+        : null;
+      const ownList = inv.listId ? Lists.getList(inv.listId) : null;
+      const refList = snap || ownList || Lists.active();
+      const refName = snap
+        ? `${inv.listName || (ownList ? ownList.name : '—')} (أسعار وقت الحفظ)`
+        : ownList ? ownList.name : `غير متاحة — قورنت بـ«${activeListName()}»`;
       const s = Comparison.summarize(inv.items, refList, Number(inv.invoiceDiscountPct) || 0);
       let badge = '<span class="status-badge status-match">متوازنة</span>';
       let value = signedMoney(s.netDiff);
@@ -774,7 +818,7 @@
               ${inv.invoiceNo ? `<span class="ms-2 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5">${esc(inv.invoiceNo)}</span>` : ''}
               <span class="ms-1 text-xs font-bold text-slate-400">${esc(inv.date) || ''}</span>
             </p>
-            <p class="text-xs text-slate-500 mt-1">${inv.items.length} بند · اللستة: ${esc(refList ? refList.name : '—')} · حُفظت في ${new Date(inv.createdAt).toLocaleString('ar-EG')}</p>
+            <p class="text-xs text-slate-500 mt-1">${inv.items.length} بند · اللستة: ${esc(refName)} · حُفظت في ${new Date(inv.createdAt).toLocaleString('ar-EG')}</p>
           </div>
           <div class="flex flex-wrap items-center gap-4">
             <div class="text-center">
@@ -800,56 +844,56 @@
   function reportToTSV() {
     const s = curSummarize();
     const t = s.totals;
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق قبل الخصم', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'].join('\t');
+    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الحجم', 'اللون', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق قبل الخصم', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'].join('\t');
     const rows = State.items.map((it) => {
       const r = curAnalyze(it);
       const ud = r.status === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.unitDiff) < 1e-9 ? '0.00' : signedNum(r.unitDiff));
       const td = r.status === Comparison.STATUS.UNKNOWN ? '—' : (Math.abs(r.totalDiff) < 1e-9 ? '0.00' : signedNum(r.totalDiff));
       return [
-        it.itemNumber || '—', it.name, it.unit || '—',
+        it.itemNumber || '—', it.name, it.unit || '—', it.size || '—', it.color || '—',
         fmtNum(it.quantity), fmtNum(it.unitPrice),
         fmtNum(it.discountValue || 0), fmtPct(it.discountPct || 0), fmtNum(r.netUnit),
         fmtNum(r.invoiceTotal),
         r.listPrice === null ? '—' : fmtNum(r.listPrice),
         r.listPrice === null ? '—' : (Math.abs(r.unitDiffBefore) < 1e-9 ? '0.00' : signedNum(r.unitDiffBefore)),
-        ud, td, Comparison.statusText(r.status, r.invoiceDiscountPct),
+        ud, td, statusTextOf(r),
       ].join('\t');
     });
     const summary = [
       '',
-      ['', '', '', '', 'إجمالي الفاتورة', '', '', '', fmtNum(t.invoiceTotal), 'الإجمالي المعتمد', '', '', fmtNum(t.expectedTotal)].join('\t'),
-      ['', '', '', '', 'إجمالي الزيادة', '', '', '', fmtNum(t.highTotal), 'إجمالي الانخفاض', '', '', fmtNum(t.lowTotal)].join('\t'),
-      ['', '', '', '', 'صافي الفرق', '', '', '', signedNum(s.netDiff), 'بنود غير مسجلة', '', '', String(t.unknownCount)].join('\t'),
+      ['', '', '', '', '', '', 'إجمالي الفاتورة', '', '', '', fmtNum(t.invoiceTotal), 'الإجمالي المعتمد', '', '', fmtNum(t.expectedTotal)].join('\t'),
+      ['', '', '', '', '', '', 'إجمالي الزيادة', '', '', '', fmtNum(t.highTotal), 'إجمالي الانخفاض', '', '', fmtNum(t.lowTotal)].join('\t'),
+      ['', '', '', '', '', '', 'صافي الفرق', '', '', '', signedNum(s.netDiff), 'بنود غير مسجلة', '', '', String(t.unknownCount)].join('\t'),
     ];
     return [header, ...rows, ...summary].join('\n');
   }
 
   /** مصفوفة خلايا لتصدير Excel مباشرة (أرقام حقيقية قابلة للحساب) */
   function reportToAOACells() {
-    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق قبل الخصم', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'];
+    const header = ['رقم الصنف', 'اسم المنتج', 'الوحدة', 'الحجم', 'اللون', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي المبلغ', 'السعر المعتمد', 'فرق قبل الخصم', 'فرق الوحدة', 'إجمالي الفرق', 'مؤشر المراجعة'];
     const body = State.items.map((it) => {
       const r = curAnalyze(it);
       return [
-        it.itemNumber || '', it.name, it.unit || '',
+        it.itemNumber || '', it.name, it.unit || '', it.size || '', it.color || '',
         it.quantity, it.unitPrice, it.discountValue || 0, it.discountPct || 0, r.netUnit, r.invoiceTotal,
         r.listPrice === null ? '' : r.listPrice,
         r.listPrice === null ? '' : (Math.abs(r.unitDiffBefore) < 1e-9 ? 0 : r.unitDiffBefore),
         r.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(r.unitDiff) < 1e-9 ? 0 : r.unitDiff),
         r.status === Comparison.STATUS.UNKNOWN ? '' : (Math.abs(r.totalDiff) < 1e-9 ? 0 : r.totalDiff),
-        Comparison.statusText(r.status, r.invoiceDiscountPct),
+        statusTextOf(r),
       ];
     });
     return [header, ...body];
   }
 
   function invoicesToTSV() {
-    const header = ['العميل', 'رقم الفاتورة', 'التاريخ', 'رقم الصنف', 'المنتج', 'الوحدة', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي البند'].join('\t');
+    const header = ['العميل', 'رقم الفاتورة', 'التاريخ', 'رقم الصنف', 'المنتج', 'الوحدة', 'الحجم', 'اللون', 'الكمية', 'سعر الوحدة', 'خصم القيمة', 'خصم النسبة', 'صافي السعر', 'إجمالي البند'].join('\t');
     const rows = Invoices.getAll().flatMap((inv) =>
       inv.items.map((it) => {
         const r = Comparison.analyzeItem(it, undefined, Number(inv.invoiceDiscountPct) || 0);
         return [
           inv.customer !== undefined && inv.customer !== null ? inv.customer : inv.vendor || '', inv.invoiceNo || '', inv.date || '',
-          it.itemNumber || '', it.name || '', it.unit || '',
+          it.itemNumber || '', it.name || '', it.unit || '', it.size || '', it.color || '',
           fmtNum(it.quantity), fmtNum(it.unitPrice), fmtNum(it.discountValue || 0), fmtPct(it.discountPct || 0), fmtNum(r.netUnit), fmtNum(r.invoiceTotal),
         ].join('\t');
       }));
@@ -882,7 +926,7 @@
         <td>${i + 1}</td>
         <td>${esc(it.itemNumber || '—')}</td>
         <td>${esc(it.name || '—')}</td>
-        <td>${esc(it.unit || '—')}</td>
+        <td>${esc(it.unit || '—')}${variantOf(it) ? `<br/><small>${esc(variantOf(it))}</small>` : ''}</td>
         <td>${fmtNum(it.quantity)}</td>
         <td>${fmtNum(it.unitPrice)}</td>
         <td>${fmtNum(it.discountValue || 0)}</td>
@@ -892,7 +936,7 @@
         <td>${r.listPrice == null ? '—' : fmtNum(r.listPrice)}</td>
         <td>${fmtDiff(r.unitDiff)}</td>
         <td>${fmtDiff(r.totalDiff)}</td>
-        <td>${Comparison.statusText(st, r.invoiceDiscountPct)}</td>
+        <td>${statusTextOf(r)}</td>
       </tr>`;
     } catch (e) {
       // بند معطوب لا يُفرّغ الجدول كاملاً — صف احتياطي يُبقي التقرير مقروءاً
@@ -988,7 +1032,7 @@
   <table>
     <thead>
       <tr>
-        <th>#</th><th>رقم الصنف</th><th>اسم المنتج</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th>
+        <th>#</th><th>رقم الصنف</th><th>اسم المنتج</th><th>الوحدة / الحجم·اللون</th><th>الكمية</th><th>سعر الوحدة</th>
         <th>خصم القيمة</th><th>خصم النسبة</th><th>صافي السعر</th><th>إجمالي المبلغ</th><th>السعر المعتمد</th><th>فرق الوحدة</th><th>إجمالي الفرق</th><th>المراجعة</th>
       </tr>
     </thead>
@@ -1100,7 +1144,7 @@
 
     // الإدخال اليدوي للبنود
     $('#btn-add-item').addEventListener('click', addItem);
-    ['#item-name', '#item-qty', '#item-price', '#item-unit', '#item-number', '#item-discount-value', '#item-discount-pct'].forEach((sel) => {
+    ['#item-name', '#item-qty', '#item-price', '#item-unit', '#item-size', '#item-color', '#item-number', '#item-discount-value', '#item-discount-pct'].forEach((sel) => {
       $(sel).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } });
     });
 
@@ -1117,7 +1161,7 @@
           const f = input.dataset.field;
           input.value = f === 'quantity' ? item.quantity
             : f === 'unitPrice' ? item.unitPrice
-            : f === 'discountValue' ? fmtNum(item.discountValue)
+            : f === 'discountValue' ? (item.discountValue || '') // رقم خام: fmtNum يضيف فاصل آلاف يرفضه حقل number
             : fmtPct(item.discountPct);
         }
       }

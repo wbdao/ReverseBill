@@ -232,7 +232,11 @@
     const p = parseUrl(url);
     if (!p) throw new Error('رابط جدول غير صالح');
     const base = baseUrl(p);
-    const g = gid || p.gid || '0';
+    // gid معروف فقط إن مُرِّر صراحة أو كان مذكوراً في الرابط نفسه. عند طلب تبويب بالاسم
+    // بلا gid لا نفترض '0' أبداً — وإلا جُلب التبويب الأول بصمت مكان التبويب المطلوب.
+    const urlGid = /[#?&]gid=-?\d+/.test(url) ? p.gid : '';
+    const knownGid = gid || urlGid;
+    const g = knownGid || '0';
 
     // 1) وضع API بمفتاح (للأجهزة المقيدة) — يفسّر اسم الورقة مباشرة
     if (apiKey) {
@@ -248,13 +252,18 @@
     }
 
     // 2) نقاط تصدير عامة (تسامح مع الشبكات المقيدة)
-    const candidates = [
-      base + (p.type === 'publish'
-          ? `/pub?gid=${g}&single=true&output=csv`
-          : `/export?format=csv&gid=${g}`),
-      `${base}/gviz/tq?tqx=out:csv&gid=${g}`,
-    ];
-    if (name) candidates.push(`${base}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`);
+    const candidates = [];
+    if (knownGid || !name) {
+      candidates.push(base + (p.type === 'publish'
+        ? `/pub?gid=${g}&single=true&output=csv`
+        : `/export?format=csv&gid=${g}`));
+      // gviz لا يعمل مع معرّفات النشر (d/e/…) — للروابط الكلاسيكية فقط
+      if (p.type !== 'publish') candidates.push(`${base}/gviz/tq?tqx=out:csv&gid=${g}`);
+    }
+    if (name && p.type !== 'publish') candidates.push(`${base}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`);
+    if (!candidates.length) {
+      throw new Error(`تعذّر تحديد معرّف التبويب «${name}» (gid) من المستند المنشور — ثبّت قيمة gid له في js/config.js`);
+    }
 
     let lastErr = null;
     for (const u of candidates) {

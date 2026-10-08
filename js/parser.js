@@ -104,7 +104,7 @@
       return {
         header: true,
         m: {
-          itemNo: roles.itemNo, name: roles.name, unit: roles.unit, qty: roles.qty,
+          itemNo: roles.itemNo, name: roles.name, unit: roles.unit, size: roles.size, color: roles.color, qty: roles.qty,
           unitPrice: roles.unitPrice !== undefined ? roles.unitPrice : roles.price,
           amount: roles.amount,
           discountValue: roles.discountValue, discountPct: roles.discountPct,
@@ -131,7 +131,7 @@
     if (roles && (roles.price !== undefined || roles.unitPrice !== undefined) && (roles.name !== undefined || roles.itemNo !== undefined)) {
       return {
         header: true,
-        m: { itemNo: roles.itemNo, name: roles.name, unit: roles.unit, price: roles.price !== undefined ? roles.price : roles.unitPrice },
+        m: { itemNo: roles.itemNo, name: roles.name, unit: roles.unit, size: roles.size, color: roles.color, price: roles.price !== undefined ? roles.price : roles.unitPrice },
       };
     }
     return { header: false };
@@ -139,47 +139,52 @@
 
   /**
    * استخراج بنود فاتورة من صفوف خلايا (من اللصق/Excel/Sheets).
-   * تُملأ الأسعار تلقائياً من اللستة النشطة عند غيابها في المصدر.
-   * @returns {{ items:Array, ignored:number, autofilled:number }}
+   * السعر الغائب لا يُملأ من اللستة افتراضياً (autoPrice=false): البند يبقى بسعر 0
+   * فيظهر «أقل من المعتمد» للمراجعة بدل أن يُخفى كـ «مطابق».
+   * @returns {{ items:Array, ignored:number, autofilled:number, unknown:number, noPrice:number }}
    */
-  function extractInvoiceItems(cellsRows, { autoPrice = true } = {}) {
+  function extractInvoiceItems(cellsRows, { autoPrice = false } = {}) {
+    const { parseNum, isNumeric } = global.Utils;
     const map = buildInvoiceMapping(cellsRows);
     const items = [];
-    let ignored = 0, autofilled = 0, unknown = 0;
+    let ignored = 0, autofilled = 0, unknown = 0, noPrice = 0;
     cellsRows.forEach((c, i) => {
       if (map.header && i === 0) return;
       const m = map.header ? map.m : invoicePosMapping(c);
       const itemNo = cv(c, m.itemNo);
       const name = cv(c, m.name);
       const unit = cv(c, m.unit);
+      const size = cv(c, m.size);
+      const color = cv(c, m.color);
       const qtyRaw = cv(c, m.qty);
       const prRaw = cv(c, m.unitPrice);
       const dvRaw = cv(c, m.discountValue);
       const dpRaw = cv(c, m.discountPct);
       const key = name || itemNo;
       if (!key) { ignored++; return; }
-      if (qtyRaw === '' || !isFinite(global.Utils.parseNum(qtyRaw))) { ignored++; return; }
-      const qty = global.Utils.parseNum(qtyRaw) || 1;
+      // كمية بلا أي رقم (نص/رأس مكرر) = صف متجاهل؛ الكمية 0 تبقى 0 ولا تتحول إلى 1
+      if (!isNumeric(qtyRaw)) { ignored++; return; }
+      const qty = parseNum(qtyRaw);
 
-      let price = prRaw === '' ? 0 : global.Utils.parseNum(prRaw);
-      if (autoPrice && (prRaw === '' || !(price > 0))) {
-        const li = global.Lists ? global.Lists.findItem(itemNo, name, unit) : null;
+      let price = isNumeric(prRaw) ? parseNum(prRaw) : 0;
+      if (!(price > 0)) {
+        const li = autoPrice && global.Lists ? global.Lists.findItem(itemNo, name, unit, size, color) : null;
         if (li) { price = global.Utils.num(li.price); autofilled++; }
-        else { unknown++; } // لا يُهمَل الصف: يظهر للعرض كـ "غير مسجل بالقائمة" فيُصحَّح سعره يدوياً
+        else { noPrice++; if (autoPrice) unknown++; }
       }
       // خصم القيمة: مبلغ ثابت لكل وحدة. خصم النسبة: الكسر المتسق مع سحب السيستم.
-      // القيم > 1 تُعتبر نسباً مئوية صحيحة (1 = 1%) فتُقسَّم على 100 لتوحيد التخزين.
-      const discountValue = dvRaw === '' || !isFinite(global.Utils.parseNum(dvRaw)) ? 0 : Math.max(0, global.Utils.parseNum(dvRaw));
-      let discountPct = dpRaw === '' || !isFinite(global.Utils.parseNum(dpRaw)) ? 0 : global.Utils.parseNum(dpRaw);
-      if (discountPct > 1) discountPct = discountPct / 100;
-      items.push({ itemNumber: itemNo, name: name || itemNo, unit, quantity: qty, unitPrice: price, discountValue, discountPct });
+      // القيم ≥ 1 تُعتبر نسباً مئوية صحيحة (1 = 1%) فتُقسَّم على 100 لتوحيد التخزين.
+      const discountValue = isNumeric(dvRaw) ? Math.max(0, parseNum(dvRaw)) : 0;
+      let discountPct = isNumeric(dpRaw) ? Math.max(0, parseNum(dpRaw)) : 0;
+      if (discountPct >= 1) discountPct = discountPct / 100;
+      items.push({ itemNumber: itemNo, name: name || itemNo, unit, size, color, quantity: qty, unitPrice: price, discountValue, discountPct });
     });
-    return { items, ignored, autofilled, unknown };
+    return { items, ignored, autofilled, unknown, noPrice };
   }
 
   /**
    * استخراج بنود لستة أسعار من صفوف خلايا.
-   * @returns {{ rows:Array<{itemNumber,name,unit,price}>, ignored:number }}
+   * @returns {{ rows:Array<{itemNumber,name,unit,size,color,price}>, ignored:number }}
    */
   function extractListRows(cellsRows) {
     const map = buildListMapping(cellsRows);
@@ -187,12 +192,14 @@
     let ignored = 0;
     cellsRows.forEach((c, i) => {
       if (map.header && i === 0) return;
-      let itemNo, name, unit, priceRaw;
+      let itemNo, name, unit, priceRaw, size = '', color = '';
       if (map.header) {
         itemNo = cv(c, map.m.itemNo);
         name = cv(c, map.m.name);
         unit = cv(c, map.m.unit);
         priceRaw = cv(c, map.m.price);
+        size = cv(c, map.m.size);
+        color = cv(c, map.m.color);
       } else {
         const n = c.length;
         if (n <= 1) { ignored++; return; }
@@ -202,7 +209,7 @@
       }
       if (!name && !itemNo) { ignored++; return; }
       if (priceRaw === '' || !(global.Utils.parseNum(priceRaw) > 0)) { ignored++; return; }
-      out.push({ itemNumber: itemNo.trim(), name: (name || itemNo).trim(), unit, price: global.Utils.parseNum(priceRaw) });
+      out.push({ itemNumber: itemNo.trim(), name: (name || itemNo).trim(), unit, size, color, price: global.Utils.parseNum(priceRaw) });
     });
     return { rows: out, ignored };
   }

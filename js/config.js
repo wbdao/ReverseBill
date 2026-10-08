@@ -13,6 +13,7 @@ window.CONFIG = {
   APP_NAME: 'مراجع الفواتير',
   CURRENCY: 'ج.م',
   LIST_PAGE_SIZE: 200,            // عدد الصفوف الظاهرة بصفحة جدول اللستة (تجنب تهنيج البيانات الضخمة)
+  PRICE_TOLERANCE: 0.01,          // هامش فرق سعر الوحدة المقبول (ج.م) — يمتص تقريب القروش في السيستم
 
   /* --- مفاتيح LocalStorage (كل كيان بنطاق مستقل) --- */
   STORAGE_KEYS: {
@@ -28,14 +29,16 @@ window.CONFIG = {
   HEADER_HINTS: {
     docNo: ['invoice no', 'invoiceno', 'bill no', 'billno', 'رقم الفاتورة', 'الفاتورة', 'فاتورة', 'doc no'],
     date: ['date', 'التاريخ', 'تاريخ'],
-    tax: ['vat', 'tax', 'الضريبة', 'ضريبة', 'discount', 'الخصم', 'خصم'],
+    tax: ['vat', 'tax', 'الضريبة', 'ضريبة'],
     itemNo: ['item #', 'item no', 'itemnumber', 'item number', 'item', 'id code', 'code', 'sku', 'رقم الصنف', 'رقم البند', 'كود الصنف', 'كود', 'رمز', 'رقم', '#'],
     name: ['product name', 'productname', 'product', 'item description', 'item name', 'description', 'اسم المنتج', 'اسم الصنف', 'المنتج', 'الصنف', 'الوصف', 'البيان', 'البند', 'اسم'],
     unit: ['unit', 'uom', 'الوحدة', 'وحدة'],
+    size: ['size', 'الحجم', 'حجم', 'المقاس', 'مقاس'],
+    color: ['color', 'colour', 'اللون', 'لون'],
     qty: ['quantity', 'qty', 'الكمية', 'كمية', 'العدد', 'عدد'],
     unitPrice: ['unit price', 'unitprice', 'unit cost', 'سعر الوحدة', 'سعر الشراء', 'السعر', 'سعر'],
-    discountValue: ['discount value', 'discountvalue', 'disc value', 'discount amount', 'discountamount', 'خصم القيمة', 'قيمة الخصم', 'قيمه الخصم', 'الخصم القيمي'],
-    discountPct: ['discount rate', 'discountrate', 'discount %', 'discount pct', 'discountpercent', 'discount percentage', 'خصم النسبة', 'نسبة الخصم', 'نسبه الخصم', 'الخصم النسبي'],
+    discountValue: ['discount value', 'discountvalue', 'disc value', 'discount amount', 'discountamount', 'خصم القيمة', 'قيمة الخصم', 'قيمه الخصم', 'الخصم القيمي', 'discount', 'disc', 'الخصم', 'خصم'],
+    discountPct: ['discount rate', 'discountrate', 'discount %', 'discount pct', 'discountpercent', 'discount percentage', 'خصم النسبة', 'نسبة الخصم', 'نسبه الخصم', 'الخصم النسبي', 'خصم %', 'الخصم %', '% الخصم', 'disc %'],
     amount: ['net amount', 'netamount', 'amount', 'total', 'net', 'الإجمالي', 'المبلغ', 'القيمة', 'إجمالي', 'قيمة'],
     price: ['price', 'السعر', 'سعر', 'سعر البيع'],
   },
@@ -91,15 +94,15 @@ window.CONFIG = {
      • url فارغ "" = رسالة توجيه داخل البطاقة. color/icon لألوان البطاقة. */
   LISTS: [
     { slug: 'AgentDist', name: 'قائمة الموزع (AgentDist)', gid: '0',          tab: 'AgentDist', color: 'indigo', icon: 'fa-truck-fast',     url: SHEET_PUBLISHED_BASE },
-    { slug: 'Company',   name: 'قائمة الشركة (Company)',   gid: '',           tab: 'Company',   color: 'emerald', icon: 'fa-building',       url: SHEET_PUBLISHED_BASE },
-    { slug: 'online',    name: 'قائمة أونلاين (online)',    gid: '',           tab: 'online',    color: 'sky',     icon: 'fa-cart-shopping', url: SHEET_PUBLISHED_BASE },
-    { slug: 'Retail',    name: 'قائمة الريتيل (Retail)',    gid: '',           tab: 'Retail',    color: 'amber',   icon: 'fa-store',         url: SHEET_PUBLISHED_BASE },
-    { slug: 'Shaheen',   name: 'قائمة شاهين (Shaheen)',     gid: '',           tab: 'Shaheen',   color: 'rose',    icon: 'fa-bolt',         url: SHEET_PUBLISHED_BASE },
+    { slug: 'Company',   name: 'قائمة الشركة (Company)',   gid: '469913912',  tab: 'Company',   color: 'emerald', icon: 'fa-building',       url: SHEET_PUBLISHED_BASE },
+    { slug: 'online',    name: 'قائمة أونلاين (online)',    gid: '1635816176', tab: 'online',    color: 'sky',     icon: 'fa-cart-shopping', url: SHEET_PUBLISHED_BASE },
+    { slug: 'Retail',    name: 'قائمة الريتيل (Retail)',    gid: '255138681',  tab: 'Retail',    color: 'amber',   icon: 'fa-store',         url: SHEET_PUBLISHED_BASE },
+    { slug: 'Shaheen',   name: 'قائمة شاهين (Shaheen)',     gid: '1922417671', tab: 'Shaheen',   color: 'rose',    icon: 'fa-bolt',         url: SHEET_PUBLISHED_BASE },
   ],
   LISTS_REFRESH_HOURS: 6, // إعادة جلب تلقائية عند الإقلاع إذا مضى هذا القدر من الساعات على آخر مزامنة
   // إصدار بنية بيانات اللستات المخزنة — عند تغييره تُعاد مزامنة كل اللستات مرة واحدة
   // (الإقلاع للتغلب على بيانات قديمة اندمجت فيها وحدات مختلفة في سطر واحد قبل إصلاح المطابقة بالوحدة)
-  LIST_DATA_VERSION: 2,
+  LIST_DATA_VERSION: 3, // 3: إضافة الحجم واللون (Size/Color) — أصناف بأكثر من سعر لنفس الكود والوحدة
 
   /* --- خدمات ربط Google Sheets --- */
   SHEETS: {

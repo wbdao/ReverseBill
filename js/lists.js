@@ -2,7 +2,7 @@
    js/lists.js — قوائم الأسعار المتعددة (State/Domain)
    • إدارة لستات مستقلة (إنشاء/تسمية/حذف/تفعيل/استيراد/تصدير)
    • فهرس Map مدمج للبحث السريع (O(1) تقريباً) — يدعم عشرات آلاف الأصناف
-     index = { byCode: Map, byName: Map, codeUnit: Map, nameUnit: Map }
+     index = { byCode: Map, byName: Map, exact: Map }  (exact: الكود/الاسم + الوحدة + الحجم + اللون)
    • المطابقة: رقم الصنف+الوحدة أولاً ثم الاسم+الوحدة — لا يُخلط سعر وحدة بغيرها
    • مخزن ذاكرة مركزي window.appLists = { [slug]: items[] } — مصدر الأصناف
      في الذاكرة فور الجلب (يتمزامن تلقائياً مع كل تغيير عبر persist) وتقرأ منه
@@ -30,9 +30,12 @@
 
   /* --- بحث مفهرس سريع من المخزن المركزي بمعرّف اللستة (slug) ---
      يفضّل مسار الفهرس Map عبر كائن اللستة، ويعتمد على المصفوفة المباشرة من المخزن كبديل. */
-  function findInStore(slug, itemNumber, name, unit) {
+  function findInStore(slug, itemNumber, name, unit, size, color) {
+    return resolveInStore(slug, itemNumber, name, unit, size, color).item;
+  }
+  function resolveInStore(slug, itemNumber, name, unit, size, color) {
     const l = slug ? lists.find((x) => x.cfgSlug === slug) : null;
-    return l ? matchInList(l, itemNumber, name, unit) : matchInList(storeGet(slug), itemNumber, name, unit);
+    return resolveInList(l || storeGet(slug), itemNumber, name, unit, size, color);
   }
 
   const normName = (s) => String(s || '').trim();
@@ -45,34 +48,43 @@
   }
   const bump = (l) => { if (l) { l.__ver = (l.__ver || 0) + 1; } };
 
+  // الحجم واللون يُطبَّعان كالوحدة (حروف موحّدة + بلا حساسية حالة): "Gold" = "gold"
   function itemNorm(item) {
     return {
       nc: normalizeNum(item.itemNumber),
       nm: normalizeName(item.name),
       nu: normalizeUnit(item.unit),
+      ns: normalizeUnit(item.size),
+      ncl: normalizeUnit(item.color),
     };
+  }
+  /* --- مفتاح هوية الصنف في اللستة: (الكود أو الاسم) + الوحدة + الحجم + اللون ---
+     نفس الكود والوحدة بحجم/لون مختلف = سطر مستقل بسعره (لا يُدمج). */
+  function exactKey(item) {
+    const { nc, nm, nu, ns, ncl } = itemNorm(item);
+    return (nc ? 'n:' + nc : 'm:' + nm) + '\u0000' + nu + '\u0000' + ns + '\u0000' + ncl;
   }
 
   /* --- إضافة صنف إلى فهرس Map (يُستخدم عند البناء الضخم وأثناء الحشو) --- */
   function indexAdd(idx, it) {
-    const { nc, nm, nu } = itemNorm(it);
+    const { nc, nm } = itemNorm(it);
     if (nc) {
       if (!idx.byCode.has(nc)) idx.byCode.set(nc, []);
       idx.byCode.get(nc).push(it);
-      const key = nc + '\u0000' + nu;
-      if (!idx.codeUnit.has(key)) idx.codeUnit.set(key, it);
     }
     if (nm) {
       if (!idx.byName.has(nm)) idx.byName.set(nm, []);
       idx.byName.get(nm).push(it);
-      const key = nm + '\u0000' + nu;
-      if (!idx.nameUnit.has(key)) idx.nameUnit.set(key, it);
+    }
+    if (nc || nm) {
+      const key = exactKey(it);
+      if (!idx.exact.has(key)) idx.exact.set(key, it);
     }
   }
 
   /* --- بناء فهرس Map للبحث السريع على لستة كبيرة --- */
   function buildIndex(items) {
-    const idx = { byCode: new Map(), byName: new Map(), codeUnit: new Map(), nameUnit: new Map() };
+    const idx = { byCode: new Map(), byName: new Map(), exact: new Map() };
     if (!items || !items.length) return idx;
     for (const it of items) indexAdd(idx, it);
     return idx;
@@ -92,90 +104,61 @@
     return { items, idx, isArray };
   }
 
+  /* --- تضييق المرشحين بالحجم/اللون ---
+     • البعد (حجم أو لون) يُطبَّق فقط إن كان مسجلاً لبعض المرشحين — صنف بلا متغيرات
+       في اللستة يُطابَق مهما كتبت الفاتورة في الحجم/اللون.
+     • حجم/لون معطى ولا يطابق أي متغير مسجل = غير مسجل (لا نسحب سعر متغير آخر).
+     • لم يُعطَ حجم/لون والمتغيرات المتبقية بأسعار مختلفة = «يحتاج تحديد» (ambiguous)؛
+       إن تساوت أسعارها فلا تعارض ونطابق أولها. */
+  function pickVariant(cands, ns, ncl) {
+    let c = cands;
+    const narrow = (val, field) => {
+      if (!c.some((it) => normalizeUnit(it[field]))) return; // بُعد غير مستخدم لهذا الصنف
+      if (val) c = c.filter((it) => normalizeUnit(it[field]) === val);
+    };
+    narrow(ns, 'size');
+    narrow(ncl, 'color');
+    if (!c.length) return { item: null, ambiguous: false };
+    if (c.length === 1) return { item: c[0], ambiguous: false };
+    const p0 = Number(c[0].price) || 0;
+    if (c.every((it) => Math.abs((Number(it.price) || 0) - p0) < 1e-9)) return { item: c[0], ambiguous: false };
+    return { item: null, ambiguous: true, variants: c };
+  }
+
   /**
-   * المطابقة الدقيقة ضمن لستة (كائن لستة أو مصفوفة items).
-   * الأولوية: رقم الصنف+الوحدة → الاسم+الوحدة → رقم الصنف → الاسم.
-   * عند إعطاء وحدة ولم يوجد تطابق دقيق بها: لا يُستعمل سعر وحدة أخرى أبداً —
-   * إدخال بوحدة مسجلة تختلف عن الوحدة المعطاة يُعتبر غير مسجل، مع السماح بالرجوع
-   * لأي إدخال بلا وحدة مسجلة (لا تعدد أسعار حينها فلا تعارض).
+   * المطابقة الدقيقة ضمن لستة (كائن لستة أو مصفوفة items) — تُرجع { item, ambiguous }.
+   * المفتاح: رقم الصنف (أو الاسم عند غياب الكود) → الوحدة → الحجم/اللون.
+   * • الكود غير موجود باللستة = «غير مسجل» (لا رجوع للاسم: كود قديم/جديد بنفس الاسم).
+   * • وحدة معطاة بلا تطابق: لا يُستعمل سعر وحدة أخرى أبداً، مع السماح بإدخال بلا وحدة.
+   * • بلا وحدة في البند: نطابق وحدة أول إدخال (السلوك السابق).
    */
-  function matchInList(list, itemNumber, name, unit) {
+  function resolveInList(list, itemNumber, name, unit, size, color) {
+    const none = { item: null, ambiguous: false };
     const D = dataOf(list);
-    if (!D || !D.items.length) return null;
+    if (!D || !D.items.length) return none;
     const nc = normalizeNum(itemNumber);
     const nm = normalizeName(name);
     const nu = normalizeUnit(unit);
 
-    if (D.idx) {
-      // == المسار السريع (فهرس Map) — مناسب للبيانات الضخمة ==
-      if (nc) {
-        const arr = D.idx.byCode.get(nc);
-        if (arr && arr.length) {
-          if (nu) {
-            const byU = arr.filter((it) => normalizeUnit(it.unit) === nu);
-            if (byU.length) return byU[0];
-            const noUnit = arr.filter((it) => !normalizeUnit(it.unit));
-            if (noUnit.length) return noUnit[0]; // إدخال بلا وحدة: لا تعارض في الأسعار
-            return null; // الكود موجود لكن بوحدات مختلفة — لا نستخدم سعر وحدة أخرى
-          }
-          return arr[0]; // لا وحدة معطاة في البند: نطابق بالكود فقط
-        }
-        // الاعتماد على كود الصنف لا الاسم: الكود غير موجود باللستة = «غير مسجل».
-        // (بعض الأصناف لها كود قديم وكود جديد بنفس الاسم ولكل كود سعره
-        //  الخاص — المطابقة بالاسم قد تسحب سعر الكود الخطأ)
-        return null;
-      }
-      if (nm) {
-        if (nu) {
-          const nHit = D.idx.nameUnit.get(nm + '\u0000' + nu);
-          if (nHit) return nHit;
-          const nmArr = D.idx.byName.get(nm);
-          if (nmArr && nmArr.length) {
-            const noUnit = nmArr.filter((it) => !normalizeUnit(it.unit));
-            if (noUnit.length) return noUnit[0];
-            return null;
-          }
-          return null;
-        }
-        const arr = D.idx.byName.get(nm);
-        if (arr && arr.length) return arr[0];
-        return null;
-      }
-      return null;
-    }
-
-    // == المسار الاحتياطي (مصفوفة مباشرة) ==
-    const items = D.items;
+    let cands;
     if (nc) {
-      const byNum = items.filter((it) => normalizeNum(it.itemNumber) === nc);
-      if (byNum.length) {
-        if (nu) {
-          const byU = byNum.filter((it) => normalizeUnit(it.unit) === nu);
-          if (byU.length) return byU[0];
-          const noUnit = byNum.filter((it) => !normalizeUnit(it.unit));
-          if (noUnit.length) return noUnit[0];
-          return null;
-        }
-        return byNum[0];
-      }
-      // الاعتماد على الكود لا الاسم: الكود غير موجود باللستة = «غير مسجل»
-      return null;
+      cands = D.idx ? (D.idx.byCode.get(nc) || []) : D.items.filter((it) => normalizeNum(it.itemNumber) === nc);
+    } else if (nm) {
+      cands = D.idx ? (D.idx.byName.get(nm) || []) : D.items.filter((it) => normalizeName(it.name) === nm);
+    } else return none;
+    if (!cands.length) return none;
+
+    if (nu) {
+      const byU = cands.filter((it) => normalizeUnit(it.unit) === nu);
+      cands = byU.length ? byU : cands.filter((it) => !normalizeUnit(it.unit));
+    } else {
+      const u0 = normalizeUnit(cands[0].unit);
+      cands = cands.filter((it) => normalizeUnit(it.unit) === u0);
     }
-    if (nm) {
-      const byName = items.filter((it) => normalizeName(it.name) === nm);
-      if (byName.length) {
-        if (nu) {
-          const byU = byName.filter((it) => normalizeUnit(it.unit) === nu);
-          if (byU.length) return byU[0];
-          const noUnit = byName.filter((it) => !normalizeUnit(it.unit));
-          if (noUnit.length) return noUnit[0];
-          return null;
-        }
-        return byName[0];
-      }
-    }
-    return null;
+    if (!cands.length) return none;
+    return pickVariant(cands, normalizeUnit(size), normalizeUnit(color));
   }
+  const matchInList = (list, itemNumber, name, unit, size, color) => resolveInList(list, itemNumber, name, unit, size, color).item;
 
   /* ================= إدارة اللستات ================= */
   function init() {
@@ -289,23 +272,14 @@
       itemNumber: normName(data.itemNumber ?? ''),
       name: normName(data.name ?? ''),
       unit: normName(data.unit ?? ''),
+      size: normName(data.size ?? ''),
+      color: normName(data.color ?? ''),
       price: Number(data.price) || 0,
     };
   }
 
-  function sameKey(a, b) {
-    const nkA = normalizeNum(a.itemNumber), nkB = normalizeNum(b.itemNumber);
-    if (nkA && nkB && nkA === nkB) {
-      if (!a.unit && !b.unit) return true;
-      return normalizeUnit(a.unit) === normalizeUnit(b.unit);
-    }
-    const nmA = normalizeName(a.name), nmB = normalizeName(b.name);
-    if (nmA && nmB && nmA === nmB) {
-      if (!a.unit && !b.unit) return true;
-      return normalizeUnit(a.unit) === normalizeUnit(b.unit);
-    }
-    return false;
-  }
+  // نفس الصنف = نفس (الكود أو الاسم) + الوحدة + الحجم + اللون
+  const sameKey = (a, b) => exactKey(a) === exactKey(b);
 
   function upsertItem(data) {
     const l = active();
@@ -349,56 +323,21 @@
     persist();
   }
 
-  const findItem = (itemNumber, name, unit) => {
+  const findItem = (itemNumber, name, unit, size, color) => {
     const l = active();
     const slug = l && l.cfgSlug;
     // القراءة من المخزن المركزي (window.appLists) مع مسار الفهرس السريع
-    return slug ? findInStore(slug, itemNumber, name, unit) : matchInList(l, itemNumber, name, unit);
+    return slug ? findInStore(slug, itemNumber, name, unit, size, color) : matchInList(l, itemNumber, name, unit, size, color);
   };
 
   /* ================= إدخال / استيراد ضخم (بأجزاء) ================= */
-  /* --- بحث مكرّر من الفهرس (مع مراعاة الزيادات المضافة أثناء الحشو) --- */
+  /* --- المكرر أثناء الحشو = نفس مفتاح الهوية تماماً (الكود/الاسم + الوحدة + الحجم + اللون) ---
+     كود غير موجود أو متغير حجم/لون جديد → بند مستقل بسعره، فلا يُدمج كود قديم/جديد
+     أو متغيران بسعرين مختلفين في سطر واحد. */
   function lookupItem(idx, items, item) {
-    if (!idx) return matchInList(items, item.itemNumber, item.name, item.unit);
-    const nc = normalizeNum(item.itemNumber);
-    const nm = normalizeName(item.name);
-    const nu = normalizeUnit(item.unit);
-    if (nc) {
-      const key = nc + '\u0000' + nu;
-      if (idx.codeUnit.has(key)) return idx.codeUnit.get(key);
-      const arr = idx.byCode.get(nc);
-      if (arr && arr.length) {
-        if (nu) {
-          const byU = arr.filter((it) => normalizeUnit(it.unit) === nu);
-          if (byU.length) return byU[0];
-          const noUnit = arr.filter((it) => !normalizeUnit(it.unit));
-          if (noUnit.length) return noUnit[0];
-          return null; // الكود موجود بوحدة مختلفة — تُحفظ الوحدة كبند مستقل بسعره
-        }
-        return arr[0];
-      }
-      // الاعتماد على الكود لا الاسم أثناء الدمج (جلب Google Sheets):
-      // كود غير موجود → يُحفظ البند كبند مستقل، فلا يُدمج كود قديم/جديد
-      // بنفس الاسم في سطر واحد بسعر خاطئ.
-      return null;
-    }
-    if (nm) {
-      const key = nm + '\u0000' + nu;
-      if (idx.nameUnit.has(key)) return idx.nameUnit.get(key);
-      const arr = idx.byName.get(nm);
-      if (arr && arr.length) {
-        if (nu) {
-          const byU = arr.filter((it) => normalizeUnit(it.unit) === nu);
-          if (byU.length) return byU[0];
-          const noUnit = arr.filter((it) => !normalizeUnit(it.unit));
-          if (noUnit.length) return noUnit[0];
-          return null;
-        }
-        return arr[0];
-      }
-      return null;
-    }
-    return null;
+    if (idx) return idx.exact.get(exactKey(item)) || null;
+    const key = exactKey(item);
+    return items.find((it) => exactKey(it) === key) || null;
   }
 
   /* --- قلب الاستيراد: يحشر شريحة rows على نفس الفهرس المبني مرة واحدة --- */
@@ -420,19 +359,35 @@
    * استيراد صفوف {itemNumber,name,unit,price} إلى لستة محددة مع تحديث المكررات.
    * يستخدم فهرس المطابقة لتفادي البحث الخطي أثناء الحشو (بدون إعادة بناء لكل صف).
    */
-  function importRows(listId, rows) {
+  function importRows(listId, rows, { replace = false } = {}) {
     const l = getList(listId);
     if (!l) throw new Error('لستة الهدف غير موجودة.');
+    if (replace) return replaceFrom(l, rows, (h) => { importRowsCore(h, rows, 0, rows.length); });
     const res = importRowsCore(l, rows, 0, rows.length);
     if (res.added || res.updated) { bump(l); persist(); }
     return { added: res.added, updated: res.updated, total: l.items.length };
+  }
+
+  /* --- استبدال أصناف اللستة كاملة بنسخة المصدر (مزامنة سحابية) ---
+     يُبنى في حاوية مؤقتة ثم يُبدَّل دفعة واحدة: الأصناف المحذوفة من الشيت تختفي،
+     ولا تُقرأ لستة نصف ممتلئة أثناء الحشو. مصدر فارغ لا يمسح اللستة القائمة. */
+  async function replaceFrom(l, rows, fill) {
+    if (!rows.length) throw new Error('المصدر لم يُرجع أي صنف صالح — أُبقيت اللستة كما هي.');
+    const h = mkList(l.name);
+    h.id = l.id + '__incoming';
+    await fill(h);
+    indexCache.delete(h.id);
+    const previous = l.items.length;
+    l.items = h.items;
+    bump(l); persist();
+    return { added: 0, updated: 0, total: l.items.length, previous, replaced: true };
   }
 
   /**
    * استيراد ضخم على أجزاء متقاطعة مع الخيط الرئيسي (عدم حجب الواجهة أثناء تحميل الخلفية).
    * يقسم الحشو إلى شرائح ويُفرّغ الخيط بينها عبر requestIdleCallback (السقوط لـ setTimeout).
    */
-  async function importRowsChunked(listId, rows, { chunkSize = 400, idle = true } = {}) {
+  async function importRowsChunked(listId, rows, { chunkSize = 400, idle = true, replace = false } = {}) {
     const l = getList(listId);
     if (!l) throw new Error('لستة الهدف غير موجودة.');
     let added = 0, updated = 0;
@@ -442,13 +397,17 @@
       if (idle && ric) ric(res, { timeout: 50 });
       else setTimeout(res, 0);
     });
-    let i = 0;
-    while (i < rows.length) {
-      const res = importRowsCore(l, rows, i, Math.min(rows.length, i + chunkSize));
-      added += res.added; updated += res.updated;
-      i += chunkSize;
-      if (i < rows.length) await yieldNext();
-    }
+    const fillChunked = async (target) => {
+      let i = 0;
+      while (i < rows.length) {
+        const res = importRowsCore(target, rows, i, Math.min(rows.length, i + chunkSize));
+        added += res.added; updated += res.updated;
+        i += chunkSize;
+        if (i < rows.length) await yieldNext();
+      }
+    };
+    if (replace) return replaceFrom(l, rows, fillChunked);
+    await fillChunked(l);
     if (added || updated) { bump(l); persist(); }
     return { added, updated, total: l.items.length };
   }
@@ -458,9 +417,9 @@
   const exportListJson = (id) => JSON.stringify({ name: (getList(id) || {}).name || '', items: itemsOf(id) }, null, 2);
   const listToTSV = (id) => {
     const l = getList(id);
-    const header = 'رقم الصنف\tاسم المنتج\tالوحدة\tالسعر المعتمد';
+    const header = 'رقم الصنف\tاسم المنتج\tالوحدة\tالحجم\tاللون\tالسعر المعتمد';
     if (!l || !l.items.length) return header;
-    return [header, ...l.items.slice(0, 20001).map((it) => `${it.itemNumber || ''}\t${it.name}\t${it.unit || ''}\t${fmtNum(it.price)}`)].join('\n');
+    return [header, ...l.items.slice(0, 20001).map((it) => `${it.itemNumber || ''}\t${it.name}\t${it.unit || ''}\t${it.size || ''}\t${it.color || ''}\t${fmtNum(it.price)}`)].join('\n');
   };
 
   function importAllJson(text, replace = false) {
@@ -487,6 +446,8 @@
           itemNumber: normName(rit.itemNumber ?? ''),
           name: normName(rit.name ?? ''),
           unit: normName(rit.unit ?? ''),
+          size: normName(rit.size ?? ''),
+          color: normName(rit.color ?? ''),
           price: Number(rit.price ?? rit.basePrice ?? 0) || 0,
         };
         if (!item.name && !item.itemNumber) continue;
@@ -520,7 +481,7 @@
     init, all, count, getList, active, activeIdOf, create, rename, remove, setActive,
     itemsOf, ensureList, upsertItem, updateItem, removeItem, clearList, clearAllByReset, findItem, matchInList,
     reconcile,
-    syncMemory, storeGet, findInStore,
+    syncMemory, storeGet, findInStore, resolveInList, resolveInStore, exactKey,
     importRows, importRowsChunked, exportAllJson, exportListJson, listToTSV, importAllJson, seed, buildIndex,
   };
 })(window);
