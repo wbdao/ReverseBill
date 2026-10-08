@@ -755,6 +755,9 @@
         const p = Math.max(0, Math.min(pageCount - 1, parseInt(b.dataset.page, 10)));
         State.listPage = p;
         renderListItems();
+        // الصفحة الجديدة تبدأ من أعلى الجدول، والبطاقة كاملة داخل الشاشة
+        const sc = $('#prod-table-scroll');
+        if (sc) { sc.scrollTop = 0; sc.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
       });
     });
   }
@@ -1238,7 +1241,10 @@
     let searchTimer = null;
     $('#prod-search').addEventListener('input', (e) => {
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => { State.productFilter = e.target.value; State.listPage = 0; renderListItems(); }, 150);
+      searchTimer = setTimeout(() => {
+        State.productFilter = e.target.value; State.listPage = 0; renderListItems();
+        const sc = $('#prod-table-scroll'); if (sc) sc.scrollTop = 0;
+      }, 150);
     });
 
     // المقارنة الشاملة بين كل اللستات

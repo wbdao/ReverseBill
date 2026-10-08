@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
 
   <!-- الأنماط المخصصة -->
-  <link rel="stylesheet" href="css/style.css?v=4" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
 </head>
 
 <body class="bg-slate-100 min-h-screen text-slate-800">
@@ -303,9 +303,10 @@
             <span class="text-xs text-slate-500" id="prod-stats"></span>
             <button id="btn-copy-list-tsv" class="btn btn-ghost" title="لصق مباشر في Excel"><i class="fa-solid fa-table"></i> نسخ كجدول</button>
           </div>
-          <div class="overflow-x-auto">
+          <!-- ارتفاع الجدول = ارتفاع الشاشة مع تمرير داخلي ورأس ثابت (بدل صفحة طويلة جداً) -->
+          <div id="prod-table-scroll" class="table-viewport overflow-auto rounded-lg border border-slate-100">
             <table class="w-full min-w-[680px] text-sm">
-              <thead>
+              <thead class="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_#e2e8f0]">
                 <tr class="text-slate-500 text-xs">
                   <th class="text-right py-2 px-3">رقم الصنف</th>
                   <th class="text-right py-2 px-3">اسم المنتج</th>
@@ -397,17 +398,17 @@
        وحدات التطبيق — تُحمَّل بالترتيب (الأمان ← الخدمات ← الدولة ← الواجهة)
        ═══════════════════════════════════════════════════════════════════ -->
   <!-- ?v=N: رقم إصدار يُرفع مع كل تحديث حتى لا يخلط المتصفح index.html جديداً مع سكربتات قديمة من الكاش -->
-  <script src="js/auth.js?v=4"></script>
-  <script src="js/config.js?v=4"></script>
-  <script src="js/utils.js?v=4"></script>
-  <script src="js/storage.js?v=4"></script>
-  <script src="js/parser.js?v=4"></script>
-  <script src="js/sheets.js?v=4"></script>
-  <script src="js/excel.js?v=4"></script>
-  <script src="js/lists.js?v=4"></script>
-  <script src="js/invoices.js?v=4"></script>
-  <script src="js/comparison.js?v=4"></script>
-  <script src="js/state.js?v=4"></script>
-  <script src="js/app.js?v=4"></script>
+  <script src="js/auth.js?v=5"></script>
+  <script src="js/config.js?v=5"></script>
+  <script src="js/utils.js?v=5"></script>
+  <script src="js/storage.js?v=5"></script>
+  <script src="js/parser.js?v=5"></script>
+  <script src="js/sheets.js?v=5"></script>
+  <script src="js/excel.js?v=5"></script>
+  <script src="js/lists.js?v=5"></script>
+  <script src="js/invoices.js?v=5"></script>
+  <script src="js/comparison.js?v=5"></script>
+  <script src="js/state.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

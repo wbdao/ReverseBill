@@ -191,3 +191,7 @@ tbody tr { animation: fadeSlide .2s ease-out; }
 .auth-foot { font-size: 0.7rem; font-weight: 600; color: #94a3b8; margin: 0; }
 
 #btn-logout:hover { background: #fee2e2; color: #be123c; }
+/* جدول اللستة بارتفاع الشاشة: يُخصم ارتفاع شريط البحث وأزرار الصفحات وهوامش البطاقة */
+.table-viewport { max-height: max(16rem, calc(100vh - 13rem)); }
+.table-viewport thead th { background: #fff; }
+@media print { .table-viewport { max-height: none; overflow: visible; } }
